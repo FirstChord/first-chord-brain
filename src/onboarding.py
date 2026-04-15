@@ -61,6 +61,9 @@ class OnboardingWorkflow:
         # Regenerate FC identity layer so new student is immediately visible
         self._regenerate_fc_layer()
 
+        # Add to dashboard registry and deploy
+        self._update_dashboard_registry()
+
     @staticmethod
     def _generate_fc_student_id(student_forename: str, student_surname: str, email: str) -> str:
         """
@@ -540,9 +543,10 @@ Soundslice code: {self.student_data['soundslice_code']}
 
         try:
             # Bust the Sheets cache so the new row is fetched fresh
-            cache = Path("/tmp/fc_sheets_cache.json")
-            if cache.exists():
-                cache.unlink()
+            for cache_name in ["fc_sheets_cache.json", "fc_sheets_cache_v2.json"]:
+                cache = Path("/tmp") / cache_name
+                if cache.exists():
+                    cache.unlink()
 
             # Ensure the brain root is on the path so generate_fc_ids is importable
             brain_dir = Path(__file__).parent.parent
@@ -567,3 +571,135 @@ Soundslice code: {self.student_data['soundslice_code']}
         except Exception as e:
             console.print(f"\n[yellow]⚠️  FC layer update skipped: {e}[/yellow]")
             console.print("[dim]Run manually: python3 generate_fc_ids.py[/dim]")
+
+    def _update_dashboard_registry(self):
+        """Add student to dashboard students-registry.js and deploy to Railway"""
+        import subprocess
+        from pathlib import Path
+
+        console.print("\n")
+        console.print(Panel.fit(
+            "Updating dashboard registry...",
+            border_style="dim"
+        ))
+
+        mms_id = self.student_data.get('mms_id', '')
+        if not mms_id:
+            console.print("\n[yellow]⚠️  No MMS ID — skipping dashboard update[/yellow]")
+            console.print("[dim]Once MMS ID is known, add manually via the add-student skill[/dim]")
+            return
+
+        brain_dir = Path(__file__).parent.parent
+        dashboard_dir = brain_dir.parent / "music-school-dashboard"
+        registry_path = dashboard_dir / "lib" / "config" / "students-registry.js"
+        url_mappings_path = dashboard_dir / "lib" / "student-url-mappings.js"
+
+        if not registry_path.exists():
+            console.print(f"[red]✗ Registry not found at {registry_path}[/red]")
+            return
+
+        # Check MMS ID not already in registry
+        registry_content = registry_path.read_text()
+        if mms_id in registry_content:
+            console.print(f"[yellow]  {mms_id} already in registry — skipping[/yellow]")
+            return
+
+        # Generate friendly URL — firstname, fall back to firstname-lastinitial
+        first_name = self.student_data['student_forename'].lower()
+        last_initial = self.student_data['student_surname'][0].lower() if self.student_data.get('student_surname') else ''
+
+        friendly_url = first_name
+        if url_mappings_path.exists():
+            mappings_content = url_mappings_path.read_text()
+            if f"'{first_name}'" in mappings_content:
+                friendly_url = f"{first_name}-{last_initial}" if last_initial else first_name
+                if f"'{friendly_url}'" in mappings_content:
+                    friendly_url = Prompt.ask(
+                        f"[yellow]'{first_name}' and '{friendly_url}' both taken. Enter unique URL slug[/yellow]",
+                        default=f"{first_name}-{self.student_data['student_surname'].lower()[:4]}"
+                    )
+
+        console.print(f"  Portal URL: [cyan]/{friendly_url}[/cyan]")
+
+        # Build the registry entry
+        name = f"{self.student_data['student_forename']} {self.student_data['student_surname']}"
+        tutor = self.student_data['tutor_short']
+        instrument = self.student_data['instrument']
+        soundslice_raw = self.student_data.get('soundslice_url', '')
+        soundslice_val = f"'{soundslice_raw}'" if soundslice_raw else 'null'
+        theta = self.student_data.get('theta_username', f"{first_name}fc")
+        fc_id = self.student_data.get('fc_student_id', '')
+
+        entry = (
+            f"\n  '{mms_id}': {{\n"
+            f"    firstName: '{self.student_data['student_forename']}',\n"
+            f"    lastName: '{self.student_data['student_surname']}',\n"
+            f"    friendlyUrl: '{friendly_url}',\n"
+            f"    tutor: '{tutor}',\n"
+            f"    instrument: '{instrument}',\n"
+            f"    soundsliceUrl: {soundslice_val},\n"
+            f"    thetaUsername: '{theta}',\n"
+            f"    fcStudentId: '{fc_id}',\n"
+            f"  }}, // {name}\n"
+        )
+
+        # Insert before the closing `};`
+        if not registry_content.rstrip().endswith('};'):
+            console.print("[red]✗ Could not find closing }; in registry[/red]")
+            return
+
+        updated = registry_content.rstrip()[:-2] + entry + '};\n'
+        registry_path.write_text(updated)
+        console.print(f"  [green]✓[/green] Added {name} to registry")
+
+        # Regenerate config files
+        console.print("  Running generate-configs...")
+        result = subprocess.run(
+            ['npm', 'run', 'generate-configs'],
+            cwd=dashboard_dir,
+            capture_output=True,
+            text=True
+        )
+        if result.returncode != 0:
+            console.print(f"[red]✗ generate-configs failed:\n{result.stderr}[/red]")
+            return
+        console.print("  [green]✓[/green] Configs regenerated")
+
+        # Commit and push
+        files_to_stage = [
+            'lib/config/students-registry.js',
+            'lib/student-url-mappings.js',
+            'lib/student-helpers.js',
+            'lib/soundslice-mappings.js',
+            'lib/config/theta-credentials.js',
+            'lib/config/instruments.js',
+        ]
+        subprocess.run(['git', 'add'] + files_to_stage, cwd=dashboard_dir, capture_output=True)
+
+        commit_msg = f"feat: add {name} ({mms_id}) to {tutor}'s students"
+        commit = subprocess.run(
+            ['git', 'commit', '-m', commit_msg],
+            cwd=dashboard_dir,
+            capture_output=True,
+            text=True
+        )
+        if commit.returncode != 0:
+            console.print(f"[yellow]  Commit skipped (nothing changed or already committed)[/yellow]")
+            return
+        console.print(f"  [green]✓[/green] Committed")
+
+        push = subprocess.run(
+            ['git', 'push'],
+            cwd=dashboard_dir,
+            capture_output=True,
+            text=True
+        )
+        if push.returncode != 0:
+            console.print(f"[red]✗ Push failed: {push.stderr}[/red]")
+            return
+
+        console.print(f"  [green]✓[/green] Pushed → Railway deploying (~2 min)")
+        console.print(
+            f"\n[green]✅ Dashboard:[/green] "
+            f"https://efficient-sparkle-production.up.railway.app/{friendly_url}"
+        )
