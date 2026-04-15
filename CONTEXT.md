@@ -76,11 +76,11 @@ New students onboarded via Brain get `fc_std_` from `forename:surname:email` (pr
 |---|---|
 | `Students` | Live student roster (Brain + Payment Pause source of truth) |
 | `Pause History` | Log of payment pauses |
-| `FC_Students` | All 213 students with FC IDs, `is_adult` flag |
-| `FC_People` | 367 people: tutors + students + parents |
+| `FC_Students` | 199 students with FC IDs, `is_adult` flag |
+| `FC_People` | 349 people: tutors + students + parents |
 | `FC_Tutors` | 16 active tutors with FC + MMS IDs |
-| `FC_Parent_Student_Links` | 155 parent→student relationships |
-| `FC_External_IDs` | 990 mappings: MMS, Stripe, Soundslice, Theta |
+| `FC_Parent_Student_Links` | 150 parent→student relationships |
+| `FC_External_IDs` | 942 mappings: MMS, Stripe, Soundslice, Theta |
 
 **To regenerate:** `python3 generate_fc_ids.py` — fetches live data, writes all 5 FC tabs directly.
 
@@ -190,15 +190,17 @@ npx firebase deploy
 
 ---
 
-## Data Quality — Known Issues (39 review flags)
+## Data Quality — Known Issues (28 review flags)
 
-Run `cat exports/fc_identity_layer/review_flags.txt` for full list. Key categories:
+Run `cat exports/fc_identity_layer/review_flags.txt` for the full list. These are **known, tracked defects** — not random breakage. The system functions correctly with them present.
 
-- **6 tutor conflicts** — registry and Sheets disagree on tutor assignment (3× Eléna↔Ines, 1× Arion↔Fennella, 2× Scott↔Kenny swapped)
-- **20 registry-only students** — in dashboard but missing a Sheets row
-- **13 sheets-only students** — in Sheets but not in dashboard registry
+| Category | Count | Meaning | Urgency |
+|---|---|---|---|
+| `TUTOR CONFLICT` | 6 | Registry and Sheets disagree on tutor assignment (e.g. Eléna↔Ines, Scott↔Kenny swapped) | Low — cosmetic only |
+| `REGISTRY ONLY` | 12 | In dashboard registry but missing a Sheets row | Low — student has a dashboard page but no Sheets entry |
+| `SHEETS ONLY` | 10 | In Sheets but not in dashboard registry | Low — student is known to Brain/identity but has no dashboard page |
 
-These need manual resolution. Not urgent — system functions correctly in the meantime.
+To re-run flags: `python3 generate_fc_ids.py` (flags are regenerated each time).
 
 ---
 
