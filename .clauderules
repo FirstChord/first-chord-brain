@@ -1,0 +1,168 @@
+# First Chord Brain - Claude Code Rules
+
+## Project Overview
+CLI tool for First Chord Music School student onboarding workflow.
+Automates the 5-step WGCS process (WhatsApp → Google Sheets → MMS Calendar → Welcome + Soundslice → Community).
+
+## Coding Standards
+
+### Python Style
+- Follow PEP 8 style guide
+- Use type hints where helpful (but not required everywhere)
+- Docstrings for all public functions
+- Maximum line length: 100 characters (flexible for readability)
+
+### File Organization
+- Keep modules under 200 lines when possible
+- One class per file
+- Clear separation of concerns:
+  - `src/onboarding.py` - Main workflow
+  - `src/sheets_client.py` - Google Sheets integration
+  - `src/mms_client.py` - MyMusicStaff API
+  - `src/templates.py` - Message templates
+
+### Naming Conventions
+- Functions: `snake_case`
+- Classes: `PascalCase`
+- Constants: `UPPER_SNAKE_CASE`
+- Private methods: `_leading_underscore`
+
+### Error Handling
+- Always catch specific exceptions
+- Never silently fail - show user-friendly messages
+- Continue workflow when possible (e.g., if API fails, show message but continue)
+- Log errors to console with `console.print()` from Rich
+
+### User Experience
+- Use Rich library for beautiful terminal output
+- Show progress clearly (Step 1/5, Step 2/5, etc.)
+- Auto-copy messages to clipboard when possible
+- Always show what was done (verification)
+- Provide fallback methods (API fails? Show manual steps)
+
+### Data Management
+- Store sensitive data in `.env` file (never commit)
+- Save backups (TSV files, vault records)
+- Use absolute paths (never assume current directory)
+- UTF-8 encoding for all file I/O
+
+## Google Sheets Column Order (NEVER CHANGE)
+Critical: These columns must match the existing spreadsheet exactly:
+
+```
+A: Tutor Name (uppercase)
+B: Student Surname
+C: Student Forename
+D: Email
+E: MMS ID (blank initially)
+F: Theta Username
+G: Soundslice URL
+H: Instrument
+I: Parent Surname
+J: Parent Forename
+```
+
+## Message Templates (USE EXACT WORDING)
+Templates in `src/templates.py` must match First Chord's official messaging:
+- Welcome message - includes payment link, address, handbook
+- Soundslice follow-up - includes course code
+- Experience levels: "a complete beginner", "has some experience", "at an intermediate level"
+
+## Teacher Database
+All teacher information in `src/mms_client.py`:
+- Keep short names and full names
+- Include all instruments each teacher teaches
+- Update MMS teacher IDs as needed
+- Never hard-code teacher info elsewhere
+
+## Testing
+- Write tests for new features in `tests/`
+- Run `python3 tests/test_tsv_export.py` before committing
+- Manual testing: Run full onboarding with test data
+
+## Dependencies
+Keep minimal. Current dependencies:
+- `gspread` - Google Sheets
+- `google-auth` - Google authentication
+- `requests` - HTTP requests
+- `python-dotenv` - Environment variables
+- `rich` - Terminal UI
+- `pyperclip` - Clipboard operations
+
+## File Structure Rules
+```
+first-chord-brain/
+├── brain.py              # Entry point (keep simple)
+├── src/                  # Source code
+│   ├── onboarding.py    # Main workflow orchestration
+│   ├── sheets_client.py # Google Sheets API
+│   ├── mms_client.py    # MyMusicStaff API
+│   └── templates.py     # Message templates
+├── tests/               # Test files
+├── exports/             # TSV exports (git ignored)
+├── vault/               # Obsidian vault for records
+├── .env                 # API credentials (git ignored)
+└── *.md                 # Documentation
+```
+
+## Git Practices
+Never commit:
+- `.env` files (credentials)
+- `exports/` folder (student data)
+- `__pycache__/` (Python cache)
+- Test files unless intentional
+
+## When Adding Features
+1. Update this rules file if conventions change
+2. Update PROTOCOLS.md if workflow changes
+3. Add tests if adding critical functionality
+4. Update README.md with user-facing changes
+5. Create dated update docs (e.g., UPDATES_2025-11-22.md)
+
+## Common Patterns
+
+### Collecting User Input
+```python
+value = Prompt.ask("Question", default="default")
+confirm = Confirm.ask("Are you sure?", default=True)
+```
+
+### Console Output
+```python
+console.print("[green]✅ Success message[/green]")
+console.print("[yellow]⚠️  Warning message[/yellow]")
+console.print("[red]❌ Error message[/red]")
+console.print("[cyan]Info message[/cyan]")
+```
+
+### File Paths
+```python
+# Always use absolute paths
+script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+file_path = os.path.join(script_dir, 'subfolder', 'file.txt')
+```
+
+### API Calls
+```python
+try:
+    result = api_call()
+    if result['success']:
+        console.print("[green]✅ Success[/green]")
+    else:
+        console.print(f"[yellow]⚠️  {result['error']}[/yellow]")
+except Exception as e:
+    console.print(f"[red]❌ Failed: {e}[/red]")
+    console.print("[dim]Continuing with manual steps...[/dim]")
+```
+
+## Remember
+- **User first**: Clear messages, beautiful output, helpful errors
+- **Reliable backups**: TSV files, vault records, clipboard copies
+- **Exact templates**: Match First Chord's official wording
+- **Flexible workflow**: Continue even if APIs fail
+- **Test before ship**: Run tests, try full onboarding
+
+---
+
+Last updated: 2025-11-22
+Update this file when conventions change!
