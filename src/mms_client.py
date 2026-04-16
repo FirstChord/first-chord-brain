@@ -164,15 +164,18 @@ class MMSClient:
             })
         return all_tutors
 
-    def get_waiting_students(self):
+    def get_waiting_students(self, max_age_days=120):
         """
-        Fetch all students with 'Waiting' status from MMS.
-        Returns a list of student dicts with name, mms_id, and family info.
+        Fetch students with 'Waiting' status from MMS, ordered most recent first.
+        Students added more than max_age_days ago are excluded (default 4 months).
+        Returns a list of student dicts with name, mms_id, date_started, and family info.
         """
+        from datetime import datetime, timedelta
+
         endpoint = 'https://api.mymusicstaff.com/v1/search/students'
         params = {
             'offset': 0,
-            'limit': 50,
+            'limit': 100,
             'fields': 'Family',
             'orderby': '-DateStarted'
         }
@@ -194,6 +197,8 @@ class MMSClient:
             'FamilyIDs': []
         }
 
+        cutoff = datetime.now() - timedelta(days=max_age_days)
+
         try:
             response = requests.post(endpoint, params=params, json=payload, headers=headers)
             if not response.ok:
@@ -204,6 +209,19 @@ class MMSClient:
 
             students = []
             for s in students_raw:
+                # Parse DateStarted
+                date_started = None
+                date_str = s.get('DateStarted', '')
+                if date_str:
+                    try:
+                        date_started = datetime.fromisoformat(date_str.replace('Z', ''))
+                    except ValueError:
+                        pass
+
+                # Skip entries older than max_age_days
+                if date_started and date_started < cutoff:
+                    continue
+
                 family = s.get('Family') or {}
                 parents = family.get('Parents') or []
                 parent = parents[0] if parents else {}
@@ -214,6 +232,7 @@ class MMSClient:
                     'first_name':      s.get('FirstName', ''),
                     'last_name':       s.get('LastName', ''),
                     'full_name':       f"{s.get('FirstName','')} {s.get('LastName','')}".strip(),
+                    'date_started':    date_started,
                     'parent_forename': parent.get('FirstName', ''),
                     'parent_surname':  parent.get('LastName', ''),
                     'parent_name':     parent.get('FormalName', ''),
@@ -224,6 +243,92 @@ class MMSClient:
 
         except Exception as e:
             return {'success': False, 'error': str(e)}
+
+    def get_student_details(self, mms_id):
+        """
+        Fetch full student record from MMS including the Note field,
+        which contains sign-up form submission data (instrument, age,
+        experience, genres, songs).
+
+        Returns a dict with keys:
+            success, status, date_started, note, email, telephone, parsed
+
+        'parsed' is the output of _parse_note_fields() — a dict with any
+        of: instrument, age, experience, genres, songs.
+        """
+        endpoint = f'https://api.mymusicstaff.com/v1/students/{mms_id}'
+        headers = {
+            'Authorization': f'Bearer {self.bearer_token}',
+            'Content-Type': 'application/json',
+            'Accept': 'application/json, text/plain, */*',
+            'x-schoolbox-version': 'main'
+        }
+        try:
+            r = requests.get(endpoint, headers=headers)
+            if not r.ok:
+                return {'success': False, 'error': f'{r.status_code}: {r.text}'}
+
+            data = r.json()
+            email_obj  = data.get('Email')     or {}
+            tel_obj    = data.get('Telephone') or {}
+            note       = data.get('Note', '') or ''
+
+            return {
+                'success':      True,
+                'status':       data.get('Status', ''),
+                'date_started': data.get('DateStarted', ''),
+                'note':         note,
+                'email':        email_obj.get('EmailAddress', ''),
+                'telephone':    tel_obj.get('TelephoneNumber', ''),
+                'parsed':       self._parse_note_fields(note),
+            }
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def _parse_note_fields(self, note_text):
+        """
+        Parse the structured sign-up form data embedded in MMS student Notes.
+
+        The form generates lines like:
+            Students Age: 21
+            What instruments are they interested in learning?: Piano & Keyboard
+            Do they already have some music background/experience?: No
+            Favourite genres of music?: Classical
+            Which song(s) would you love to learn?: Moonlight Sonata
+
+        Returns a dict with any of: instrument, age, experience, genres, songs.
+        Values of '(Not Provided)' / blank are omitted.
+        """
+        if not note_text:
+            return {}
+
+        SKIP = {'(not provided)', '(not available)', 'not provided', 'n/a', ''}
+        result = {}
+
+        for line in note_text.split('\n'):
+            line = line.strip()
+            if ':' not in line:
+                continue
+
+            key_raw, _, value = line.partition(':')
+            key   = key_raw.strip().lower()
+            value = value.strip()
+
+            if value.lower().strip('()') in SKIP:
+                continue
+
+            if 'instrument' in key:
+                result['instrument'] = value
+            elif 'age' in key and 'students' in key:
+                result['age'] = value
+            elif 'background' in key or ('experience' in key and 'music' in key):
+                result['experience'] = value   # "Yes" or "No"
+            elif 'genre' in key:
+                result['genres'] = value
+            elif 'song' in key:
+                result['songs'] = value
+
+        return result
 
     def create_lesson(self, student_name, tutor_name, lesson_date, lesson_time, duration_minutes=30):
         """

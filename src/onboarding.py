@@ -87,10 +87,13 @@ class OnboardingWorkflow:
 
     def _pick_waiting_student(self):
         """
-        Fetch MMS waiting students and let user pick one to pre-fill onboarding.
-        Pre-fills: name, MMS ID, parent name/email. Returns True if selected.
+        Fetch MMS waiting students (last 4 months) and let user pick one.
+        Pre-fills: name, MMS ID, parent info, and form data from Note field
+        (instrument, age, experience, genres, songs).
+        Returns True if a student was selected.
         """
         from rich.table import Table as RichTable
+        from datetime import datetime
 
         console.print("[bold cyan]Fetching waiting students from MMS...[/bold cyan]")
         result = self.mms.get_waiting_students()
@@ -102,20 +105,35 @@ class OnboardingWorkflow:
 
         students = result['students']
         if not students:
-            console.print("[yellow]No waiting students found — entering manually[/yellow]\n")
+            console.print("[yellow]No waiting students in the last 4 months — entering manually[/yellow]\n")
             return False
 
+        now = datetime.now()
         table = RichTable(show_header=True, header_style="bold cyan", box=None)
         table.add_column("#", style="dim", width=3)
-        table.add_column("Student", min_width=22)
-        table.add_column("Parent", min_width=22)
-        table.add_column("Email", min_width=28, overflow="fold")
+        table.add_column("Student", min_width=20)
+        table.add_column("Added", width=10)
+        table.add_column("Parent", min_width=20)
+        table.add_column("Email", min_width=26, overflow="fold")
 
         for i, s in enumerate(students, 1):
-            table.add_row(str(i), s['full_name'], s['parent_name'], s['parent_email'])
+            ds = s.get('date_started')
+            if ds:
+                days_ago = (now - ds).days
+                date_label = ds.strftime('%d %b %y')
+                if days_ago > 90:
+                    date_cell = f"[red]{date_label}[/red]"
+                elif days_ago > 60:
+                    date_cell = f"[yellow]{date_label}[/yellow]"
+                else:
+                    date_cell = date_label
+            else:
+                date_cell = ''
+
+            table.add_row(str(i), s['full_name'], date_cell, s['parent_name'], s['parent_email'])
 
         console.print(table)
-        console.print("[dim]Enter a number to select a waiting student, or 0 to enter manually[/dim]")
+        console.print("[dim]0 = enter manually  |  [yellow]yellow[/yellow] = 60+ days  |  [red]red[/red] = 90+ days[/dim]")
 
         valid = [str(i) for i in range(0, len(students) + 1)]
         choice = Prompt.ask("Select student", choices=valid, default='0')
@@ -125,24 +143,87 @@ class OnboardingWorkflow:
             return False
 
         s = students[int(choice) - 1]
-        self.student_data['name'] = s['full_name']
+
+        # Fetch full record to get form data from Note field
+        console.print(f"  [dim]Fetching details for {s['full_name']}...[/dim]")
+        details = self.mms.get_student_details(s['mms_id'])
+
+        # Pre-fill core identity fields
+        self.student_data['name']             = s['full_name']
         self.student_data['student_forename'] = s['first_name']
-        self.student_data['student_surname'] = s['last_name']
-        self.student_data['mms_id'] = s['mms_id']
-        self.student_data['parent_name'] = s['parent_name']
-        self.student_data['parent_forename'] = s['parent_forename']
-        self.student_data['parent_surname'] = s['parent_surname']
-        self.student_data['parent_email'] = s['parent_email']
+        self.student_data['student_surname']  = s['last_name']
+        self.student_data['mms_id']           = s['mms_id']
+        self.student_data['parent_name']      = s['parent_name']
+        self.student_data['parent_forename']  = s['parent_forename']
+        self.student_data['parent_surname']   = s['parent_surname']
+        self.student_data['parent_email']     = s['parent_email']
         self.student_data['_from_waiting_list'] = True
 
-        console.print(f"[green]✓ Selected:[/green] {s['full_name']} [dim](MMS: {s['mms_id']})[/dim]\n")
+        # Pre-fill form data from parsed Note
+        if details.get('success'):
+            parsed = details.get('parsed', {})
+
+            if parsed.get('instrument'):
+                self.student_data['_prefill_instrument'] = parsed['instrument']
+            if parsed.get('age'):
+                self.student_data['_prefill_age'] = parsed['age']
+            if parsed.get('experience'):
+                self.student_data['_prefill_experience'] = parsed['experience']
+
+            # Combine genres + songs into interests string
+            interests_parts = []
+            if parsed.get('genres'):
+                interests_parts.append(parsed['genres'])
+            if parsed.get('songs'):
+                interests_parts.append(parsed['songs'])
+            if interests_parts:
+                self.student_data['_prefill_interests'] = ', '.join(interests_parts)
+
+            # Show summary of what was found
+            if parsed:
+                console.print(f"\n  [green]✓ Form data found in MMS notes:[/green]")
+                if parsed.get('instrument'):
+                    console.print(f"    Instrument  [dim]→[/dim] {parsed['instrument']}")
+                if parsed.get('age'):
+                    console.print(f"    Age         [dim]→[/dim] {parsed['age']}")
+                if parsed.get('experience'):
+                    exp_label = 'beginner' if parsed['experience'].lower() == 'no' else 'has experience'
+                    console.print(f"    Experience  [dim]→[/dim] {parsed['experience']} ({exp_label})")
+                if parsed.get('genres'):
+                    console.print(f"    Genres      [dim]→[/dim] {parsed['genres']}")
+                if parsed.get('songs'):
+                    console.print(f"    Songs       [dim]→[/dim] {parsed['songs']}")
+            else:
+                console.print(f"  [dim]No form submission found in notes[/dim]")
+
+        console.print(f"\n[green]✓ Selected:[/green] {s['full_name']} [dim](MMS: {s['mms_id']})[/dim]\n")
         return True
+
+    @staticmethod
+    def _normalise_instrument(raw):
+        """Map MMS form instrument text to our standard instrument names."""
+        r = raw.lower()
+        if 'piano' in r or 'keyboard' in r:
+            return 'Piano'
+        if 'ukulele' in r or 'uke' in r:
+            return 'Ukulele'
+        if 'singing' in r or 'voice' in r or 'vocal' in r:
+            return 'Singing'
+        if 'bass' in r:
+            return 'Bass'
+        if 'guitar' in r:
+            return 'Guitar'
+        return raw.split('&')[0].strip().title()  # best-effort: take first instrument
 
     def _collect_lesson_details(self):
         """Collect lesson day, time, and date"""
         console.print("[bold cyan]Lesson details:[/bold cyan]")
 
-        self.student_data['instrument'] = Prompt.ask("Instrument", default="Piano")
+        # Use instrument from MMS form data if available, normalised to our names
+        raw_instrument = self.student_data.pop('_prefill_instrument', None)
+        default_instrument = self._normalise_instrument(raw_instrument) if raw_instrument else "Piano"
+
+        self.student_data['instrument'] = Prompt.ask("Instrument", default=default_instrument)
         self.student_data['lesson_length'] = Prompt.ask("Lesson length (mins)", default="30")
         self.student_data['day'] = Prompt.ask("Day", default="Tuesday")
         self.student_data['time'] = Prompt.ask("Time", default="4pm")
@@ -274,15 +355,21 @@ class OnboardingWorkflow:
                 default=self.student_data.get('parent_email', '')
             )
 
-            self.student_data['age'] = Prompt.ask("Student age")
+            default_age = self.student_data.pop('_prefill_age', '')
+            self.student_data['age'] = Prompt.ask("Student age", default=default_age)
 
-        # Experience level with choices
+        # Experience level — default from MMS form ("No" → beginner, "Yes" → some experience)
+        exp_prefill = self.student_data.pop('_prefill_experience', None)
+        default_exp = '1'
+        if exp_prefill:
+            default_exp = '2' if exp_prefill.strip().lower() == 'yes' else '1'
+
         console.print("\nExperience level:")
         console.print("  1. Complete beginner")
         console.print("  2. Some experience (1-2 years)")
         console.print("  3. Intermediate (3+ years)")
 
-        exp_choice = Prompt.ask("Choice", choices=['1', '2', '3'], default='1')
+        exp_choice = Prompt.ask("Choice", choices=['1', '2', '3'], default=default_exp)
         exp_map = {
             '1': 'a complete beginner',
             '2': 'has some experience',
@@ -290,9 +377,10 @@ class OnboardingWorkflow:
         }
         self.student_data['experience_level'] = exp_map[exp_choice]
 
+        default_interests = self.student_data.pop('_prefill_interests', 'Pop music')
         self.student_data['interests'] = Prompt.ask(
             f"What does {self.student_data['name']} love?",
-            default="Pop music"
+            default=default_interests
         )
 
         # Get unique Soundslice code for this student
