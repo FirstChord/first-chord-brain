@@ -25,13 +25,23 @@ class OnboardingWorkflow:
     def start(self, student_name):
         """Start the onboarding workflow"""
         console.print("\n")
+
+        # Offer waiting-list picker first — pre-fills name, MMS ID, parent info
+        self._pick_waiting_student()
+
+        # Resolve name: prefer waiting-list selection over CLI argument
+        if not self.student_data.get('name'):
+            if not student_name:
+                student_name = Prompt.ask("Student name")
+            self.student_data['name'] = student_name
+
+        resolved_name = self.student_data['name']
+
         console.print(Panel.fit(
-            f"🎵 STUDENT ONBOARDING: {student_name}",
+            f"🎵 STUDENT ONBOARDING: {resolved_name}",
             border_style="blue"
         ))
         console.print("\n")
-
-        self.student_data['name'] = student_name
 
         # Collect information
         self._collect_lesson_details()
@@ -74,6 +84,59 @@ class OnboardingWorkflow:
         """
         seed = f"{student_forename.strip().lower()}:{student_surname.strip().lower()}:{email.strip().lower()}"
         return f"fc_std_{hashlib.sha256(seed.encode()).hexdigest()[:8]}"
+
+    def _pick_waiting_student(self):
+        """
+        Fetch MMS waiting students and let user pick one to pre-fill onboarding.
+        Pre-fills: name, MMS ID, parent name/email. Returns True if selected.
+        """
+        from rich.table import Table as RichTable
+
+        console.print("[bold cyan]Fetching waiting students from MMS...[/bold cyan]")
+        result = self.mms.get_waiting_students()
+
+        if not result['success']:
+            console.print(f"[yellow]Could not fetch waiting students: {result['error']}[/yellow]")
+            console.print("[dim]Proceeding with manual entry[/dim]\n")
+            return False
+
+        students = result['students']
+        if not students:
+            console.print("[yellow]No waiting students found — entering manually[/yellow]\n")
+            return False
+
+        table = RichTable(show_header=True, header_style="bold cyan", box=None)
+        table.add_column("#", style="dim", width=3)
+        table.add_column("Student", min_width=22)
+        table.add_column("Parent", min_width=22)
+        table.add_column("Email", min_width=28, overflow="fold")
+
+        for i, s in enumerate(students, 1):
+            table.add_row(str(i), s['full_name'], s['parent_name'], s['parent_email'])
+
+        console.print(table)
+        console.print("[dim]Enter a number to select a waiting student, or 0 to enter manually[/dim]")
+
+        valid = [str(i) for i in range(0, len(students) + 1)]
+        choice = Prompt.ask("Select student", choices=valid, default='0')
+
+        if choice == '0':
+            console.print()
+            return False
+
+        s = students[int(choice) - 1]
+        self.student_data['name'] = s['full_name']
+        self.student_data['student_forename'] = s['first_name']
+        self.student_data['student_surname'] = s['last_name']
+        self.student_data['mms_id'] = s['mms_id']
+        self.student_data['parent_name'] = s['parent_name']
+        self.student_data['parent_forename'] = s['parent_forename']
+        self.student_data['parent_surname'] = s['parent_surname']
+        self.student_data['parent_email'] = s['parent_email']
+        self.student_data['_from_waiting_list'] = True
+
+        console.print(f"[green]✓ Selected:[/green] {s['full_name']} [dim](MMS: {s['mms_id']})[/dim]\n")
+        return True
 
     def _collect_lesson_details(self):
         """Collect lesson day, time, and date"""
@@ -158,34 +221,46 @@ class OnboardingWorkflow:
         """Collect student information for welcome message"""
         console.print("\n[bold cyan]Student information:[/bold cyan]")
 
+        from_waiting = self.student_data.get('_from_waiting_list', False)
+        if from_waiting:
+            console.print("[dim]Pre-filled from MMS waiting list — press Enter to accept, or type to override[/dim]")
+
         # Adult or child?
         is_adult = Confirm.ask("Is this student an adult?", default=False)
         self.student_data['is_adult'] = is_adult
 
-        # Split student name into forename and surname
-        name_parts = self.student_data['name'].strip().split()
-        if len(name_parts) >= 2:
-            suggested_forename = name_parts[0]
-            suggested_surname = ' '.join(name_parts[1:])
-        else:
-            suggested_forename = name_parts[0] if name_parts else ''
-            suggested_surname = ''
+        # Student name — fall back to splitting the full name if not already split
+        name_parts = self.student_data.get('name', '').strip().split()
+        fallback_forename = name_parts[0] if name_parts else ''
+        fallback_surname = ' '.join(name_parts[1:]) if len(name_parts) >= 2 else ''
 
-        self.student_data['student_forename'] = Prompt.ask("Student first name", default=suggested_forename)
-        self.student_data['student_surname'] = Prompt.ask("Student surname", default=suggested_surname)
+        self.student_data['student_forename'] = Prompt.ask(
+            "Student first name",
+            default=self.student_data.get('student_forename') or fallback_forename
+        )
+        self.student_data['student_surname'] = Prompt.ask(
+            "Student surname",
+            default=self.student_data.get('student_surname') or fallback_surname
+        )
 
         if is_adult:
             # Adult: message goes directly to them, no parent fields needed
             self.student_data['parent_name'] = f"{self.student_data['student_forename']} {self.student_data['student_surname']}"
             self.student_data['parent_forename'] = self.student_data['student_forename']
             self.student_data['parent_surname'] = self.student_data['student_surname']
-            self.student_data['parent_email'] = Prompt.ask("Student email")
+            self.student_data['parent_email'] = Prompt.ask(
+                "Student email",
+                default=self.student_data.get('parent_email', '')
+            )
             self.student_data['age'] = None
         else:
             # Child: collect parent information
-            self.student_data['parent_name'] = Prompt.ask("Parent full name")
+            self.student_data['parent_name'] = Prompt.ask(
+                "Parent full name",
+                default=self.student_data.get('parent_name', '')
+            )
 
-            # Split parent name
+            # Re-split in case user edited the name
             parent_parts = self.student_data['parent_name'].strip().split()
             if len(parent_parts) >= 2:
                 self.student_data['parent_forename'] = parent_parts[0]
@@ -194,8 +269,10 @@ class OnboardingWorkflow:
                 self.student_data['parent_forename'] = parent_parts[0] if parent_parts else ''
                 self.student_data['parent_surname'] = ''
 
-            # Get parent email
-            self.student_data['parent_email'] = Prompt.ask("Parent email")
+            self.student_data['parent_email'] = Prompt.ask(
+                "Parent email",
+                default=self.student_data.get('parent_email', '')
+            )
 
             self.student_data['age'] = Prompt.ask("Student age")
 
@@ -243,14 +320,17 @@ class OnboardingWorkflow:
             default=suggested_theta
         )
 
-        # MMS student ID — usually available immediately since students sign up via MMS
-        mms_raw = Prompt.ask(
-            "\nMMS student ID [dim](e.g. sdt_2grxJL — press Enter to skip if not yet created)[/dim]",
-            default=""
-        ).strip()
-        self.student_data['mms_id'] = mms_raw if mms_raw.startswith("sdt_") else ""
-        if mms_raw and not mms_raw.startswith("sdt_"):
-            console.print("[yellow]  MMS ID not recognised (should start with sdt_) — left blank[/yellow]")
+        # MMS student ID — already set if picked from waiting list
+        if self.student_data.get('mms_id'):
+            console.print(f"\n[green]✓ MMS ID:[/green] {self.student_data['mms_id']} [dim](from MMS waiting list)[/dim]")
+        else:
+            mms_raw = Prompt.ask(
+                "\nMMS student ID [dim](e.g. sdt_2grxJL — press Enter to skip if not yet created)[/dim]",
+                default=""
+            ).strip()
+            self.student_data['mms_id'] = mms_raw if mms_raw.startswith("sdt_") else ""
+            if mms_raw and not mms_raw.startswith("sdt_"):
+                console.print("[yellow]  MMS ID not recognised (should start with sdt_) — left blank[/yellow]")
 
         # Generate canonical FC student ID (assigned at onboarding, stable before MMS ID exists)
         self.student_data['fc_student_id'] = self._generate_fc_student_id(

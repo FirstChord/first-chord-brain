@@ -26,12 +26,8 @@ def main():
     command = sys.argv[1].lower()
 
     if command == "onboard":
-        if len(sys.argv) < 3:
-            console.print("[red]Error:[/red] Please provide student name")
-            console.print("[yellow]Usage:[/yellow] python3 brain.py onboard \"Student Name\"")
-            sys.exit(1)
-
-        student_name = sys.argv[2]
+        # Name is optional — if omitted, the waiting-list picker will handle it
+        student_name = sys.argv[2] if len(sys.argv) >= 3 else ""
         workflow = OnboardingWorkflow()
         workflow.start(student_name)
 

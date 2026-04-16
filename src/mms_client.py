@@ -164,6 +164,67 @@ class MMSClient:
             })
         return all_tutors
 
+    def get_waiting_students(self):
+        """
+        Fetch all students with 'Waiting' status from MMS.
+        Returns a list of student dicts with name, mms_id, and family info.
+        """
+        endpoint = 'https://api.mymusicstaff.com/v1/search/students'
+        params = {
+            'offset': 0,
+            'limit': 50,
+            'fields': 'Family',
+            'orderby': '-DateStarted'
+        }
+        headers = {
+            'Authorization': f'Bearer {self.bearer_token}',
+            'Content-Type': 'application/json',
+            'Accept': 'application/json, text/plain, */*',
+            'x-schoolbox-version': 'main'
+        }
+        payload = {
+            'IDs': [],
+            'SearchText': '',
+            'FirstName': None,
+            'LastName': None,
+            'EmailAddress': None,
+            'Statuses': ['Waiting'],
+            'StudentGroupIDs': [],
+            'TeacherIDs': [],
+            'FamilyIDs': []
+        }
+
+        try:
+            response = requests.post(endpoint, params=params, json=payload, headers=headers)
+            if not response.ok:
+                return {'success': False, 'error': f'{response.status_code}: {response.text}'}
+
+            data = response.json()
+            students_raw = data.get('ItemSubset', [])
+
+            students = []
+            for s in students_raw:
+                family = s.get('Family') or {}
+                parents = family.get('Parents') or []
+                parent = parents[0] if parents else {}
+                parent_email_obj = parent.get('Email') or {}
+
+                students.append({
+                    'mms_id':          s.get('ID', ''),
+                    'first_name':      s.get('FirstName', ''),
+                    'last_name':       s.get('LastName', ''),
+                    'full_name':       f"{s.get('FirstName','')} {s.get('LastName','')}".strip(),
+                    'parent_forename': parent.get('FirstName', ''),
+                    'parent_surname':  parent.get('LastName', ''),
+                    'parent_name':     parent.get('FormalName', ''),
+                    'parent_email':    parent_email_obj.get('EmailAddress', ''),
+                })
+
+            return {'success': True, 'students': students}
+
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
     def create_lesson(self, student_name, tutor_name, lesson_date, lesson_time, duration_minutes=30):
         """
         Create a lesson in MMS calendar
