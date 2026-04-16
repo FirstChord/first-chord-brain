@@ -306,8 +306,19 @@ class OnboardingWorkflow:
         if from_waiting:
             console.print("[dim]Pre-filled from MMS waiting list — press Enter to accept, or type to override[/dim]")
 
-        # Adult or child?
-        is_adult = Confirm.ask("Is this student an adult?", default=False)
+        # Pop age early so we can use it for adult auto-detection
+        prefill_age_str = self.student_data.pop('_prefill_age', '')
+
+        # Adult or child? Auto-detect: age >= 19 → default True
+        default_adult = False
+        try:
+            if int(prefill_age_str) >= 19:
+                default_adult = True
+                console.print(f"[dim]Age {prefill_age_str} — defaulting to adult[/dim]")
+        except (ValueError, TypeError):
+            pass
+
+        is_adult = Confirm.ask("Is this student an adult?", default=default_adult)
         self.student_data['is_adult'] = is_adult
 
         # Student name — fall back to splitting the full name if not already split
@@ -355,8 +366,7 @@ class OnboardingWorkflow:
                 default=self.student_data.get('parent_email', '')
             )
 
-            default_age = self.student_data.pop('_prefill_age', '')
-            self.student_data['age'] = Prompt.ask("Student age", default=default_age)
+            self.student_data['age'] = Prompt.ask("Student age", default=prefill_age_str)
 
         # Experience level — default from MMS form ("No" → beginner, "Yes" → some experience)
         exp_prefill = self.student_data.pop('_prefill_experience', None)
@@ -401,8 +411,15 @@ class OnboardingWorkflow:
         else:
             self.student_data['soundslice_url'] = soundslice_input
 
-        # Generate Theta username (firstname + fc)
-        suggested_theta = self.student_data['student_forename'].lower() + 'fc'
+        # Generate Theta username: firstname + lastname + "fc", all lowercase no spaces
+        def _slug(s):
+            return s.lower().replace(' ', '').replace('-', '').replace("'", '')
+
+        suggested_theta = (
+            _slug(self.student_data['student_forename'])
+            + _slug(self.student_data['student_surname'])
+            + 'fc'
+        )
         self.student_data['theta_username'] = Prompt.ask(
             "Theta username",
             default=suggested_theta
