@@ -64,28 +64,35 @@ class SheetsClient:
 
     def add_student(self, student_data: dict) -> int | None:
         """
-        Append a new student row to the Students tab.
+        Insert a new student row into the correct tutor section of the Students tab.
 
-        Reads the header row first so it writes to the correct columns
-        regardless of sheet column order. Unknown columns are left blank.
+        The sheet is organised as:
+            TUTOR FULL NAME  (all-caps header row, Student Surname column only)
+            (blank row)
+            student rows with Tutor = "Tutor Full Name"
+            ...
+            NEXT TUTOR FULL NAME
+            ...
 
-        student_data keys used:
-            student_surname, student_forename, tutor_short (or tutor),
-            parent_surname, parent_forename, parent_email,
-            mms_id, theta_username, soundslice_url, instrument,
-            fc_student_id
+        This method finds the last student row whose Tutor column matches the new
+        student's tutor and inserts immediately after it, keeping each tutor's
+        students grouped together. Falls back to append if no match is found.
+
+        The Tutor column is written as the full name (e.g. "Arion Xenos") to match
+        the existing sheet format.
 
         Stripe fields (stripe_customer_id, stripe_subscription_id) are
         intentionally left blank — Payment Pause fills those in later.
 
-        Returns: 1-indexed row number of the new row, or None on error.
+        Returns: 1-indexed row number of the inserted row, or None on error.
         """
         try:
             self._connect()
             ws = self._spreadsheet.worksheet("Students")
 
-            # ── Read header row and build column map ─────────────────────────
-            headers = ws.row_values(1)
+            # ── Read all values once (used for both column map and section scan) ──
+            all_values = ws.get_all_values()
+            headers = all_values[0] if all_values else []
             col_map = {_normalise_header(h): i for i, h in enumerate(headers)}
 
             # ── Build values list (one entry per column) ──────────────────────
@@ -97,10 +104,13 @@ class SheetsClient:
                 if idx is not None:
                     values[idx] = value
 
-            # Core student fields — try both possible header spellings
+            # Full tutor name is what the sheet stores (e.g. "Arion Xenos")
+            tutor_full = student_data.get("tutor") or student_data.get("tutor_short", "")
+
+            # Core student fields
             put("Student Surname",  student_data.get("student_surname", ""))
             put("Student forename", student_data.get("student_forename", ""))
-            put("Tutor",            student_data.get("tutor_short") or student_data.get("tutor", ""))
+            put("Tutor",            tutor_full)
             put("Parent surname",   student_data.get("parent_surname", ""))
             put("Parent forename",  student_data.get("parent_forename", ""))
             put("Email",            student_data.get("parent_email", ""))
@@ -116,9 +126,26 @@ class SheetsClient:
 
             # Stripe fields intentionally blank — filled later by Payment Pause
 
-            # ── Append row ───────────────────────────────────────────────────
-            ws.append_row(values, value_input_option="RAW")
-            return len(ws.get_all_values())  # row number of newly added row
+            # ── Find insertion point: after the last row for this tutor ───────
+            tutor_col_idx = col_map.get(_normalise_header("Tutor"))
+            insert_after_row = None  # 1-indexed sheet row number
+
+            if tutor_full and tutor_col_idx is not None:
+                for row_idx, row in enumerate(all_values[1:], start=2):
+                    if len(row) > tutor_col_idx:
+                        cell = row[tutor_col_idx].strip()
+                        if cell.lower() == tutor_full.lower():
+                            insert_after_row = row_idx
+
+            # ── Insert or append ──────────────────────────────────────────────
+            if insert_after_row is not None:
+                target_row = insert_after_row + 1
+                ws.insert_row(values, target_row, value_input_option="RAW")
+                return target_row
+            else:
+                # Tutor section not found — append to end
+                ws.append_row(values, value_input_option="RAW")
+                return len(ws.get_all_values())
 
         except Exception as e:
             print(f"SheetsClient.add_student error: {e}")

@@ -377,6 +377,7 @@ class OnboardingWorkflow:
         console.print(f"  - Theta: {self.student_data['theta_username']}")
 
         student_data_for_sheet = {
+            'tutor': self.student_data['tutor'],          # full name — matches sheet format
             'tutor_short': self.student_data['tutor_short'],
             'student_surname': self.student_data['student_surname'],
             'student_forename': self.student_data['student_forename'],
