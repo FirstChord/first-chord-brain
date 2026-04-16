@@ -689,7 +689,7 @@ Soundslice code: {self.student_data['soundslice_code']}
         console.print(f"  [green]✓[/green] Committed")
 
         push = subprocess.run(
-            ['git', 'push'],
+            ['git', 'push', '--set-upstream', 'origin', 'main'],
             cwd=dashboard_dir,
             capture_output=True,
             text=True
