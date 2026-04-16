@@ -580,6 +580,7 @@ def generate():
     ]
     LINKS_FIELDS  = ["id","fc_parent_person_id","fc_student_id","relationship","created_at"]
     EXT_FIELDS    = ["fc_entity_id","fc_entity_type","external_system","external_key","external_value","created_at"]
+    FLAGS_FIELDS  = ["flag_type","mms_id","student_name","detail","generated_date"]
 
     write_csv("fc_students.csv",            fc_students,            STUDENTS_FIELDS)
     write_csv("fc_people.csv",              fc_people,              PEOPLE_FIELDS)
@@ -590,6 +591,29 @@ def generate():
     print(f"  ✓ fc_external_ids.csv — {len(fc_external_ids)} external ID mappings")
     print(f"  ✓ fc_parent_student_links.csv — {len(fc_parent_student_links)} parent-student links")
 
+    # ── Parse review flags into structured rows (for Sheets + admin dashboard) ──
+    def _parse_flag(s: str) -> dict:
+        for ftype in ("TUTOR CONFLICT", "SHEETS ONLY", "REGISTRY ONLY"):
+            if s.startswith(ftype):
+                rest = s[len(ftype):].strip()
+                parts = rest.split(None, 1)
+                mms_id = parts[0] if parts else ""
+                body = parts[1].strip() if len(parts) > 1 else ""
+                if ": " in body:
+                    name, detail = body.split(": ", 1)
+                elif "  [" in body:
+                    name, detail = body.split("  [", 1)
+                    detail = detail.rstrip("]")
+                else:
+                    name, detail = body, ""
+                return {"flag_type": ftype, "mms_id": mms_id,
+                        "student_name": name.strip(), "detail": detail.strip(),
+                        "generated_date": TODAY}
+        return {"flag_type": "UNKNOWN", "mms_id": "", "student_name": "",
+                "detail": s, "generated_date": TODAY}
+
+    fc_review_flags = [_parse_flag(f) for f in review_flags]
+
     # ── Write directly to Google Sheets ──────────────────────────────────────
     write_to_sheets({
         "FC_Students":             (fc_students,            STUDENTS_FIELDS),
@@ -597,6 +621,7 @@ def generate():
         "FC_Tutors":               (fc_tutors,              TUTORS_FIELDS),
         "FC_Parent_Student_Links": (fc_parent_student_links,LINKS_FIELDS),
         "FC_External_IDs":         (fc_external_ids,        EXT_FIELDS),
+        "Review_Flags":            (fc_review_flags,        FLAGS_FIELDS),
     })
 
     # ── Write review flags ──
@@ -650,6 +675,7 @@ FC_TABS = [
     "FC_Tutors",
     "FC_Parent_Student_Links",
     "FC_External_IDs",
+    "Review_Flags",   # structured review flags — readable by admin dashboard via Sheets API
 ]
 
 def write_to_sheets(tab_data: dict):

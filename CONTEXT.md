@@ -81,8 +81,9 @@ New students onboarded via Brain get `fc_std_` from `forename:surname:email` (pr
 | `FC_Tutors` | 16 active tutors with FC + MMS IDs |
 | `FC_Parent_Student_Links` | 150 parent→student relationships |
 | `FC_External_IDs` | 942 mappings: MMS, Stripe, Soundslice, Theta |
+| `Review_Flags` | Structured review flags (flag_type, mms_id, student_name, detail, generated_date) — readable by admin dashboard |
 
-**To regenerate:** `python3 generate_fc_ids.py` — fetches live data, writes all 5 FC tabs directly.
+**To regenerate:** `python3 generate_fc_ids.py` — fetches live data, writes all 6 FC tabs directly.
 
 ### Adult Students
 38 students are adults (no parent). Detected by: parent name == student name in Sheets. `is_adult=TRUE` in `FC_Students`. No ghost parent entity or parent-student link is created for them.
