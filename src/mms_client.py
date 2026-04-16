@@ -264,7 +264,7 @@ class MMSClient:
             'x-schoolbox-version': 'main'
         }
         try:
-            r = requests.get(endpoint, headers=headers)
+            r = requests.get(endpoint, params={'fields': 'Family'}, headers=headers)
             if not r.ok:
                 return {'success': False, 'error': f'{r.status_code}: {r.text}'}
 
@@ -273,14 +273,26 @@ class MMSClient:
             tel_obj    = data.get('Telephone') or {}
             note       = data.get('Note', '') or ''
 
+            # Parent telephone — used for child students whose own Telephone is blank
+            # Parent record uses MobileTelephone / HomeTelephone (not a plain Telephone field)
+            family  = data.get('Family')  or {}
+            parents = family.get('Parents') or []
+            parent  = parents[0] if parents else {}
+
+            def _parent_tel(field):
+                return (parent.get(field) or {}).get('TelephoneNumber', '').strip()
+
+            parent_tel = _parent_tel('MobileTelephone') or _parent_tel('HomeTelephone') or _parent_tel('WorkTelephone')
+
             return {
-                'success':      True,
-                'status':       data.get('Status', ''),
-                'date_started': data.get('DateStarted', ''),
-                'note':         note,
-                'email':        email_obj.get('EmailAddress', ''),
-                'telephone':    tel_obj.get('TelephoneNumber', ''),
-                'parsed':       self._parse_note_fields(note),
+                'success':          True,
+                'status':           data.get('Status', ''),
+                'date_started':     data.get('DateStarted', ''),
+                'note':             note,
+                'email':            email_obj.get('EmailAddress', ''),
+                'telephone':        tel_obj.get('TelephoneNumber', ''),
+                'parent_telephone': parent_tel,
+                'parsed':           self._parse_note_fields(note),
             }
         except Exception as e:
             return {'success': False, 'error': str(e)}

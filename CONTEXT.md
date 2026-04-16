@@ -33,7 +33,7 @@ All cross-tool paths are defined in `first-chord-brain/config.py`. Never hardcod
 - **Key files:**
   - `config.py` — all workspace paths
   - `generate_fc_ids.py` — generates FC IDs, writes to Sheets
-  - `src/mms_client.py` — tutor master list + MMS API
+  - `src/mms_client.py` — tutor master list + MMS API (`get_waiting_students`, `get_student_details`, `_parse_note_fields`)
   - `src/onboarding.py` — full WGCS onboarding flow
   - `src/sheets_client.py` — writes new students to Google Sheets
   - `exports/fc_identity_layer/` — local CSV backup of FC identity layer
@@ -114,6 +114,32 @@ Single source of truth: `first-chord-brain/src/mms_client.py`. To add a tutor: a
 
 ---
 
+## MMS API
+
+All MMS API calls use `Bearer {MMS_BEARER_TOKEN}` + `x-schoolbox-version: main` headers.
+
+### Methods in `src/mms_client.py`
+
+| Method | What it does |
+|---|---|
+| `get_waiting_students(max_age_days=120)` | Fetches students with `Status=Waiting`, ordered most-recent first. Filters out entries older than 4 months. Returns list with `mms_id`, `full_name`, `date_started`, `parent_name`, `parent_email`. |
+| `get_student_details(mms_id)` | Fetches full student record. Returns `status`, `date_started`, `email`, `telephone`, `note` (raw), `parsed` (structured form fields). |
+| `_parse_note_fields(note_text)` | Parses sign-up form data from the free-text `Note` field. Returns dict with any of: `instrument`, `age`, `experience` ("Yes"/"No"), `genres`, `songs`. |
+| `get_tutors_for_instrument(instrument)` | Returns list of tutors who teach the given instrument. |
+
+### MMS Note field format
+Sign-up form submissions are stored in the student's `Note` field as line-delimited `Key: Value` pairs:
+```
+Students Age: 14
+What instruments are they interested in learning?: Guitar
+Do they already have some music background/experience?: No
+Favourite genres of music?: Rock
+Which song(s) would you love to learn?: Smoke on the Water
+```
+`_parse_note_fields()` extracts these into structured keys.
+
+---
+
 ## Credentials
 
 | What | Where | Used by |
@@ -147,8 +173,14 @@ Also importable: `from lookup import lookup; result = lookup("Ryan Ofee")`
 
 ### Onboard a new student (full WGCS flow)
 ```bash
+python3 ~/Desktop/FirstChord/first-chord-brain/brain.py onboard
+# or with name pre-supplied:
 python3 ~/Desktop/FirstChord/first-chord-brain/brain.py onboard "Student Name"
 ```
+The flow opens with the MMS waiting list (last 4 months, colour-coded by age).
+Select a student by number to pre-fill: name, MMS ID, parent info, instrument,
+age, experience, genres/interests, Theta username, adult status.
+Only tutor slot + Soundslice URL still need manual input.
 
 ### Regenerate FC identity layer
 ```bash
@@ -207,3 +239,6 @@ To re-run flags: `python3 generate_fc_ids.py` (flags are regenerated each time).
 ## What's NOT Yet Done
 - Dashboard `generate-configs` doesn't yet pass `fcStudentId` through to generated config files
 - When a pre-MMS student gets their MMS ID added to Sheets, their FC ID changes (from name/email seed to MMS seed) — future work to preserve the old ID as a legacy link in `FC_External_IDs`
+- MMS student status is **not** changed from "Waiting" to "Active" after onboarding — still manual in MMS
+- Stripe columns (`stripe_customer_id`, `stripe_subscription_id`) in the Students tab are not auto-populated — filled manually or by Payment Pause when the student subscribes
+- No `Status` column in the Students tab — active vs waiting distinction exists in MMS but not mirrored to Sheets

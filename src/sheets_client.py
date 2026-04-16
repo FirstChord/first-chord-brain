@@ -114,6 +114,7 @@ class SheetsClient:
             put("Parent surname",   student_data.get("parent_surname", ""))
             put("Parent forename",  student_data.get("parent_forename", ""))
             put("Email",            student_data.get("parent_email", ""))
+            put("Contact Number",   student_data.get("contact_number", ""))
             put("mms_id",           student_data.get("mms_id", ""))
 
             # Extended fields (if columns exist in the sheet)

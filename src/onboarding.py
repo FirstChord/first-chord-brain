@@ -159,6 +159,15 @@ class OnboardingWorkflow:
         self.student_data['parent_email']     = s['parent_email']
         self.student_data['_from_waiting_list'] = True
 
+        # Store telephone if available — persisted to Sheets as Contact Number
+        # Adult students: use their own telephone; children: use parent telephone
+        if details.get('success'):
+            telephone = details.get('telephone', '').strip()
+            if not telephone:
+                telephone = details.get('parent_telephone', '').strip()
+            if telephone:
+                self.student_data['contact_number'] = telephone
+
         # Pre-fill form data from parsed Note
         if details.get('success'):
             parsed = details.get('parsed', {})
@@ -368,6 +377,15 @@ class OnboardingWorkflow:
 
             self.student_data['age'] = Prompt.ask("Student age", default=prefill_age_str)
 
+        # Contact number — already set if captured from MMS waiting list
+        if self.student_data.get('contact_number'):
+            console.print(f"[dim]Contact number: {self.student_data['contact_number']} (from MMS)[/dim]")
+        else:
+            self.student_data['contact_number'] = Prompt.ask(
+                "Contact number",
+                default=''
+            )
+
         # Experience level — default from MMS form ("No" → beginner, "Yes" → some experience)
         exp_prefill = self.student_data.pop('_prefill_experience', None)
         default_exp = '1'
@@ -487,6 +505,7 @@ class OnboardingWorkflow:
             'student_surname': self.student_data['student_surname'],
             'student_forename': self.student_data['student_forename'],
             'parent_email': self.student_data['parent_email'],
+            'contact_number': self.student_data.get('contact_number', ''),
             'mms_id': self.student_data.get('mms_id', ''),
             'theta_username': self.student_data['theta_username'],
             'soundslice_url': self.student_data.get('soundslice_url', ''),
@@ -623,13 +642,16 @@ class OnboardingWorkflow:
         # Build age line and contact section based on adult/child
         is_adult = self.student_data.get('is_adult', False)
         age_line = "" if is_adult else f"- **Age:** {self.student_data['age']}\n"
+        contact_number = self.student_data.get('contact_number', '')
+        contact_number_line = f"\n- **Contact Number:** {contact_number}" if contact_number else ""
         if is_adult:
-            contact_section = f"## Contact Details\n- **Email:** {self.student_data['parent_email']}"
+            contact_section = f"## Contact Details\n- **Email:** {self.student_data['parent_email']}{contact_number_line}"
         else:
             contact_section = (
                 f"## Parent Details\n"
                 f"- **Parent Name:** {self.student_data['parent_name']}\n"
                 f"- **Parent Email:** {self.student_data['parent_email']}"
+                f"{contact_number_line}"
             )
 
         # Create content
