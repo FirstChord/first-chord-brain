@@ -50,6 +50,11 @@ APPS_SCRIPT_URL = (
     "AKfycbyVicLCz07cnJ0iTF60-2KlBJ4UaCXUvih6wLwVKzRvHRAf_BXeQLX-vWjR030tMp0RIA/exec"
 )
 
+GOOGLE_SHEETS_SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive",
+]
+
 # ── Tutor master list (from Brain's mms_client.py — single source) ──────────────
 TUTORS = [
     {"short_name": "Arion",    "full_name": "Arion Xenos",             "mms_teacher_id": "tch_zplpJw", "instruments": ["guitar", "piano"]},
@@ -67,7 +72,7 @@ TUTORS = [
     {"short_name": "David",    "full_name": "David Husz",              "mms_teacher_id": "tch_z2j2Jf", "instruments": ["guitar", "piano"]},
     {"short_name": "Scott",    "full_name": "Scott Brice",             "mms_teacher_id": "tch_zMWrJR", "instruments": ["guitar"]},
     {"short_name": "Calum",    "full_name": "Calum Steel",             "mms_teacher_id": "tch_zMX5Jc", "instruments": ["guitar"]},
-    {"short_name": "Chloe",    "full_name": "Chloe Mak",               "mms_teacher_id": "tch_zQbNJk", "instruments": ["guitar", "piano"]},
+    {"short_name": "Chloe",    "full_name": "Chloe Mak",               "mms_teacher_id": "tch_zQbNJk", "instruments": ["singing", "piano"]},
 ]
 
 # ── ID generation ──────────────────────────────────────────────────────────────
@@ -118,6 +123,55 @@ def parse_registry(path: Path) -> dict:
     return students
 
 
+def load_google_oauth_credentials_source() -> dict | None:
+    """
+    Load Google OAuth refresh-token credentials.
+
+    Priority:
+    1. Environment variables (GitHub Actions / hosted jobs)
+    2. Local token file (Finn laptop fallback)
+    """
+    env_refresh_token = os.environ.get("SHEETS_REFRESH_TOKEN", "").strip()
+    env_client_id = os.environ.get("SHEETS_CLIENT_ID", "").strip()
+    env_client_secret = os.environ.get("SHEETS_CLIENT_SECRET", "").strip()
+
+    if env_refresh_token and env_client_id and env_client_secret:
+        return {
+            "refresh_token": env_refresh_token,
+            "client_id": env_client_id,
+            "client_secret": env_client_secret,
+            "source": "env",
+        }
+
+    if TOKEN_FILE.exists():
+        token = json.loads(TOKEN_FILE.read_text())
+        token["source"] = str(TOKEN_FILE)
+        return token
+
+    return None
+
+
+def build_google_credentials():
+    from google.oauth2.credentials import Credentials
+
+    token = load_google_oauth_credentials_source()
+    if not token:
+        raise FileNotFoundError(
+            "No Google Sheets OAuth credentials found. "
+            "Set SHEETS_REFRESH_TOKEN, SHEETS_CLIENT_ID, and SHEETS_CLIENT_SECRET "
+            f"or provide token file at {TOKEN_FILE}."
+        )
+
+    return Credentials(
+        token=None,
+        refresh_token=token["refresh_token"],
+        client_id=token["client_id"],
+        client_secret=token["client_secret"],
+        token_uri="https://oauth2.googleapis.com/token",
+        scopes=GOOGLE_SHEETS_SCOPES,
+    )
+
+
 # ── Sheets fetcher ─────────────────────────────────────────────────────────────
 
 def fetch_sheets_students() -> list[dict]:
@@ -133,18 +187,7 @@ def fetch_sheets_students() -> list[dict]:
         return rows
 
     print(f"  Connecting to Google Sheets...")
-    token = json.loads(TOKEN_FILE.read_text())
-    creds = Credentials(
-        token=None,
-        refresh_token=token["refresh_token"],
-        client_id=token["client_id"],
-        client_secret=token["client_secret"],
-        token_uri="https://oauth2.googleapis.com/token",
-        scopes=[
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive",
-        ],
-    )
+    creds = build_google_credentials()
     creds.refresh(Request())
     gc = gspread.authorize(creds)
     spreadsheet_id = os.environ.get("GOOGLE_SPREADSHEET_ID", "")
@@ -684,7 +727,8 @@ def write_to_sheets(tab_data: dict):
 
     tab_data: {tab_name: (rows: list[dict], fields: list[str])}
 
-    Uses token_musiclessons.json for OAuth (refresh token — no browser needed).
+    Uses env-based refresh-token credentials when available, with local
+    token_musiclessons.json fallback for laptop use.
     Spreadsheet ID is read from GOOGLE_SPREADSHEET_ID env var / .env file.
     """
     spreadsheet_id = os.environ.get("GOOGLE_SPREADSHEET_ID")
@@ -692,31 +736,20 @@ def write_to_sheets(tab_data: dict):
         print("  ✗ GOOGLE_SPREADSHEET_ID not set — skipping Sheets write")
         return False
 
-    if not TOKEN_FILE.exists():
-        print(f"  ✗ Token file not found: {TOKEN_FILE} — skipping Sheets write")
-        return False
-
     try:
         import gspread
-        from google.oauth2.credentials import Credentials
         from google.auth.transport.requests import Request
     except ImportError as e:
         print(f"  ✗ Missing library ({e}) — skipping Sheets write")
         return False
 
     print("\nConnecting to Google Sheets...")
-    token = json.loads(TOKEN_FILE.read_text())
-    creds = Credentials(
-        token=None,
-        refresh_token=token["refresh_token"],
-        client_id=token["client_id"],
-        client_secret=token["client_secret"],
-        token_uri="https://oauth2.googleapis.com/token",
-        scopes=[
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive",
-        ],
-    )
+    try:
+        creds = build_google_credentials()
+    except FileNotFoundError as e:
+        print(f"  ✗ {e} — skipping Sheets write")
+        return False
+
     creds.refresh(Request())
     gc = gspread.authorize(creds)
     sh = gc.open_by_key(spreadsheet_id)

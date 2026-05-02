@@ -110,6 +110,15 @@ All API credentials are in `.env` (git-ignored for security):
 - `MMS_SCHOOL_ID` - Your MMS school ID
 - `STRIPE_PAYMENT_LINK` - Universal payment link (same for all students)
 
+## FC Identity Automation
+
+`generate_fc_ids.py` now supports env-based Google Sheets credentials as well as the local
+`~/token_musiclessons.json` fallback.
+
+There is also a GitHub Actions workflow for hosted FC regeneration:
+
+- see [GITHUB_ACTIONS_SETUP.md](GITHUB_ACTIONS_SETUP.md)
+
 ## Templates
 
 All message templates match the exact wording from First Chord's official templates:

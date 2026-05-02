@@ -1,0 +1,63 @@
+name: Regenerate FC IDs
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "12 * * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: regenerate-fc-ids
+  cancel-in-progress: false
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      GOOGLE_SPREADSHEET_ID: ${{ secrets.GOOGLE_SPREADSHEET_ID }}
+      SHEETS_REFRESH_TOKEN: ${{ secrets.SHEETS_REFRESH_TOKEN }}
+      SHEETS_CLIENT_ID: ${{ secrets.SHEETS_CLIENT_ID }}
+      SHEETS_CLIENT_SECRET: ${{ secrets.SHEETS_CLIENT_SECRET }}
+
+    steps:
+      - name: Checkout Brain repo
+        uses: actions/checkout@v4
+        with:
+          path: FirstChord/first-chord-brain
+
+      - name: Checkout dashboard repo
+        uses: actions/checkout@v4
+        with:
+          repository: FirstChord/first-chord-dashbord
+          token: ${{ secrets.DASHBOARD_REPO_TOKEN }}
+          path: FirstChord/music-school-dashboard
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: FirstChord/first-chord-brain/requirements.txt
+
+      - name: Install dependencies
+        working-directory: FirstChord/first-chord-brain
+        run: pip install -r requirements.txt
+
+      - name: Verify cross-repo registry path
+        run: test -f FirstChord/music-school-dashboard/lib/config/students-registry.js
+
+      - name: Run FC regeneration
+        working-directory: FirstChord/first-chord-brain
+        run: python generate_fc_ids.py
+
+      - name: Upload FC export artefacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fc-identity-layer-exports
+          path: FirstChord/first-chord-brain/exports/fc_identity_layer
+          if-no-files-found: ignore
