@@ -193,7 +193,22 @@ def fetch_sheets_students() -> list[dict]:
     spreadsheet_id = os.environ.get("GOOGLE_SPREADSHEET_ID", "")
     sh = gc.open_by_key(spreadsheet_id)
     ws = sh.worksheet("Students")
-    rows = ws.get_all_records()  # list of dicts, keys are exact header names
+    # Build records from raw values rather than ws.get_all_records(): the Students
+    # sheet has unlabelled helper columns, and gspread refuses a header row with
+    # duplicate (incl. blank) headers. Skip blank-header columns and keep the
+    # first value for any duplicate header — the dashboard reads this sheet the
+    # same tolerant way, so manual header tweaks can't break regeneration.
+    values = ws.get_all_values()  # list of lists, raw cell values
+    rows = []
+    if values:
+        headers = [h.strip() for h in values[0]]
+        for raw in values[1:]:
+            record = {}
+            for header, cell in zip(headers, raw):
+                if not header or header in record:
+                    continue
+                record[header] = cell
+            rows.append(record)
     CACHE.write_text(json.dumps(rows))
     print(f"  ✓ Fetched {len(rows)} rows from Google Sheets (direct)")
     return rows

@@ -75,3 +75,28 @@ The current automation model is:
 2. this workflow keeps the FC identity/review-flags layer fresh on a schedule or manual run
 
 The next improvement, if needed, would be dispatching this workflow from the admin app after onboarding.
+
+## Troubleshooting
+
+### Failure: "the header row in the worksheet contains duplicates: ['']"
+
+Symptom: the scheduled run fails fast (~20s) in `fetch_sheets_students()` with a
+`gspread.exceptions.GSpreadException` about duplicate header cells.
+
+Cause: a manual edit to the **Students** sheet left **two or more columns with a
+blank header** (e.g. an empty helper column plus an accidentally-emptied column
+from header surgery). gspread's `get_all_records()` refuses any duplicate header,
+including blank ones.
+
+Fix (already applied): `fetch_sheets_students()` no longer uses
+`get_all_records()`. It reads raw values (`get_all_values()`) and builds the
+records itself — **skipping blank-header columns and keeping the first value for
+any duplicate header**. This mirrors how the admin dashboard reads the same
+sheet, so unlabelled/duplicate columns no longer crash regeneration. Nothing
+writes to the Students header row, so dropping blank columns is safe.
+
+Prevention (recommended): protect the **Students** header row in Google Sheets —
+select row 1 → **Data → Protect sheets and ranges → "Show a warning when editing
+this range."** Warning mode catches accidental header edits without hard-blocking
+legit changes or the automation (which only reads Students). Do **not** protect
+the `FC_*` tabs — this workflow rewrites those each run.
