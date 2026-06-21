@@ -33,6 +33,30 @@ from datetime import date
 # ── Paths (from shared config — move FirstChord/ freely without editing here) ──
 from config import REGISTRY_PATH, FC_EXPORTS_DIR as OUTPUT_DIR, TOKEN_FILE
 ENV_FILE = Path(__file__).parent / ".env"
+
+
+# Google Sheets occasionally returns transient errors (503 service unavailable,
+# 429 rate limit, 5xx). Without a retry, a single momentary blip fails the whole
+# hourly run and sends a "job failed" alert. Retry transient ones with backoff so
+# a brief wobble self-heals instead of paging us.
+_TRANSIENT_SHEETS_STATUSES = {429, 500, 502, 503, 504}
+
+def gspread_retry(fn, *args, _attempts=4, _base_delay=1.5, **kwargs):
+    import time
+    from gspread.exceptions import APIError
+    for attempt in range(_attempts):
+        try:
+            return fn(*args, **kwargs)
+        except APIError as error:
+            status = getattr(getattr(error, "response", None), "status_code", None)
+            if status in _TRANSIENT_SHEETS_STATUSES and attempt < _attempts - 1:
+                delay = _base_delay * (2 ** attempt)
+                print(f"  ⚠ Google Sheets API {status}; retrying in {delay:.0f}s "
+                      f"(attempt {attempt + 1}/{_attempts})")
+                time.sleep(delay)
+                continue
+            raise
+
 TODAY         = date.today().isoformat()
 
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -191,14 +215,14 @@ def fetch_sheets_students() -> list[dict]:
     creds.refresh(Request())
     gc = gspread.authorize(creds)
     spreadsheet_id = os.environ.get("GOOGLE_SPREADSHEET_ID", "")
-    sh = gc.open_by_key(spreadsheet_id)
-    ws = sh.worksheet("Students")
+    sh = gspread_retry(gc.open_by_key, spreadsheet_id)
+    ws = gspread_retry(sh.worksheet, "Students")
     # Build records from raw values rather than ws.get_all_records(): the Students
     # sheet has unlabelled helper columns, and gspread refuses a header row with
     # duplicate (incl. blank) headers. Skip blank-header columns and keep the
     # first value for any duplicate header — the dashboard reads this sheet the
     # same tolerant way, so manual header tweaks can't break regeneration.
-    values = ws.get_all_values()  # list of lists, raw cell values
+    values = gspread_retry(ws.get_all_values)  # list of lists, raw cell values
     rows = []
     if values:
         headers = [h.strip() for h in values[0]]
@@ -767,12 +791,12 @@ def write_to_sheets(tab_data: dict):
 
     creds.refresh(Request())
     gc = gspread.authorize(creds)
-    sh = gc.open_by_key(spreadsheet_id)
+    sh = gspread_retry(gc.open_by_key, spreadsheet_id)
     print(f"  ✓ Opened: {sh.title}")
 
     # Build map of existing tabs (strip trailing spaces from names)
     existing = {}
-    for ws in sh.worksheets():
+    for ws in gspread_retry(sh.worksheets):
         existing[ws.title.strip()] = ws
 
     for tab_name in FC_TABS:
@@ -784,23 +808,24 @@ def write_to_sheets(tab_data: dict):
             # Try with trailing space (artefact from CSV import)
             ws = existing.get(tab_name + " ")
             if ws:
-                ws.update_title(tab_name)
+                gspread_retry(ws.update_title, tab_name)
                 print(f"  ✓ Renamed '{tab_name} ' → '{tab_name}'")
 
         if ws is None:
-            ws = sh.add_worksheet(
+            ws = gspread_retry(
+                sh.add_worksheet,
                 title=tab_name,
                 rows=max(len(rows) + 20, 100),
                 cols=len(fields) + 2,
             )
             print(f"  + Created tab: {tab_name}")
         else:
-            ws.clear()
+            gspread_retry(ws.clear)
 
         # Write header + all data rows in one API call
         header = [fields]
         data   = [[row.get(f, "") for f in fields] for row in rows]
-        ws.update(header + data, value_input_option="RAW")
+        gspread_retry(ws.update, header + data, value_input_option="RAW")
         print(f"  ✓ {tab_name:<30} {len(rows):>4} rows")
 
     print("  Sheets update complete.\n")
