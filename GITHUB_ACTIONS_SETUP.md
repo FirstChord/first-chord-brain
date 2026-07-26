@@ -31,20 +31,14 @@ Add these secrets in the `FirstChord/first-chord-brain` GitHub repo:
 - `SHEETS_REFRESH_TOKEN`
 - `SHEETS_CLIENT_ID`
 - `SHEETS_CLIENT_SECRET`
-- `DASHBOARD_REPO_TOKEN`
+
+The dashboard repository is public, so the cross-repository checkout uses the
+workflow's built-in `GITHUB_TOKEN`; it does not require a separate long-lived
+personal access token. If the dashboard repository becomes private, use a
+short-lived GitHub App token or a fine-grained token restricted to that repository
+with `Contents: Read`.
 
 ## Secret notes
-
-### `DASHBOARD_REPO_TOKEN`
-
-This token is used only so the Brain workflow can read the private dashboard repo.
-
-Minimum useful access:
-
-- access to `FirstChord/first-chord-dashbord`
-- `Contents: Read`
-
-A fine-grained token is preferable.
 
 ### Sheets OAuth trio
 
@@ -77,6 +71,13 @@ The current automation model is:
 The next improvement, if needed, would be dispatching this workflow from the admin app after onboarding.
 
 ## Troubleshooting
+
+### Failure: dashboard checkout reports "Bad credentials"
+
+The public dashboard checkout should not supply a separate token. Confirm the
+workflow does not pass a stale `DASHBOARD_REPO_TOKEN`, then re-run it. This
+failure occurs before FC regeneration starts and does not indicate a Sheets or
+FC identity calculation problem.
 
 ### Failure: "the header row in the worksheet contains duplicates: ['']"
 
