@@ -31,7 +31,15 @@ from pathlib import Path
 from datetime import date
 
 # ── Paths (from shared config — move FirstChord/ freely without editing here) ──
-from config import REGISTRY_PATH, FC_EXPORTS_DIR as OUTPUT_DIR, TOKEN_FILE
+from config import REGISTRY_PATH, FC_EXPORTS_DIR as OUTPUT_DIR, TOKEN_FILE, BRAIN_DIR
+from fc_first_seen import (
+    KEY_SPECS as FIRST_SEEN_KEYS,
+    apply_first_seen,
+    compose_key,
+    load_first_seen,
+    merge_first_seen,
+    save_first_seen,
+)
 ENV_FILE = Path(__file__).parent / ".env"
 
 
@@ -300,11 +308,9 @@ def generate():
             "created_at":     TODAY,
         })
 
-    write_csv("fc_tutors.csv", fc_tutors, [
-        "fc_tutor_id","fc_person_id","mms_teacher_id","short_name","full_name",
-        "first_name","last_name","instruments","active","created_at"
-    ])
-    print(f"  ✓ fc_tutors.csv — {len(fc_tutors)} tutors")
+    # fc_tutors.csv is written further down with the other CSVs, once created_at
+    # has been resolved to first-seen — otherwise this file and the FC_Tutors tab
+    # would disagree about the same rows.
 
     # ── OUTPUT 2: FC_People (tutors) + FC_People (students) ───────────────────
     fc_people = []
@@ -664,10 +670,37 @@ def generate():
     EXT_FIELDS    = ["fc_entity_id","fc_entity_type","external_system","external_key","external_value","created_at"]
     FLAGS_FIELDS  = ["flag_type","mms_id","student_name","detail","generated_date"]
 
+    # ── Freeze created_at to first-seen, not generation time ──
+    # These tables are rebuilt from scratch every run, so stamping TODAY made
+    # created_at meaningless. The seed file remembers instead; see fc_first_seen.
+    # Two memories, earliest wins: the committed seed file, and whatever the
+    # live tabs already hold. The seed survives a wiped Sheet; the Sheet survives
+    # the hourly job's throwaway filesystem. Neither alone covers both.
+    first_seen = load_first_seen(BRAIN_DIR)
+    recovered = merge_first_seen(first_seen, read_first_seen_from_sheets())
+
+    rows_by_table = {
+        "FC_Students": fc_students,
+        "FC_People": fc_people,
+        "FC_Tutors": fc_tutors,
+        "FC_Parent_Student_Links": fc_parent_student_links,
+        "FC_External_IDs": fc_external_ids,
+    }
+    newly_seen = sum(
+        apply_first_seen(table, rows_by_table[table], key_fields, first_seen, TODAY,
+                         fallback_key_fields=fallback)
+        for table, (key_fields, fallback) in FIRST_SEEN_KEYS.items()
+    )
+    save_first_seen(BRAIN_DIR, first_seen)
+    print(f"  ✓ first-seen dates: {len(first_seen)} known, "
+          f"{recovered} recovered from tabs, {newly_seen} new this run")
+
+    write_csv("fc_tutors.csv",              fc_tutors,              TUTORS_FIELDS)
     write_csv("fc_students.csv",            fc_students,            STUDENTS_FIELDS)
     write_csv("fc_people.csv",              fc_people,              PEOPLE_FIELDS)
     write_csv("fc_external_ids.csv",        fc_external_ids,        EXT_FIELDS)
     write_csv("fc_parent_student_links.csv",fc_parent_student_links,LINKS_FIELDS)
+    print(f"  ✓ fc_tutors.csv — {len(fc_tutors)} tutors")
     print(f"  ✓ fc_students.csv — {len(fc_students)} students")
     print(f"  ✓ fc_people.csv — {len(fc_people)} people ({len(fc_tutors)} tutors + {len(fc_students)} students + {len(fc_parents)} unique parents)")
     print(f"  ✓ fc_external_ids.csv — {len(fc_external_ids)} external ID mappings")
@@ -760,6 +793,62 @@ FC_TABS = [
     "Review_Flags",   # structured review flags — readable by admin dashboard via Sheets API
 ]
 
+def read_first_seen_from_sheets():
+    """Read existing created_at values out of the live FC tabs.
+
+    The tabs are cleared and rewritten every run, so without this the only
+    memory of when an entity first appeared is the committed seed file — and the
+    hourly GitHub job cannot write that file back, because it gets a fresh
+    filesystem every time. Reading the tabs before we overwrite them gives the
+    job a memory that survives between runs without needing repo write access.
+
+    Best-effort by design: any failure here degrades to the seed file rather
+    than failing the run. Returns {memo_key: created_at}.
+    """
+    if "--no-sheets" in sys.argv:
+        return {}
+
+    spreadsheet_id = os.environ.get("GOOGLE_SPREADSHEET_ID")
+    if not spreadsheet_id:
+        return {}
+
+    try:
+        import gspread
+        from google.auth.transport.requests import Request
+
+        creds = build_google_credentials()
+        creds.refresh(Request())
+        gc = gspread.authorize(creds)
+        sh = gspread_retry(gc.open_by_key, spreadsheet_id)
+    except Exception as error:  # noqa: BLE001 — never fail the run over this
+        print(f"  ⚠ Could not read existing first-seen dates ({error}); using seed file only")
+        return {}
+
+    existing = {ws.title.strip(): ws for ws in gspread_retry(sh.worksheets)}
+    observed = {}
+
+    for tab_name in FIRST_SEEN_KEYS:
+        ws = existing.get(tab_name)
+        if ws is None:
+            continue
+        try:
+            records = gspread_retry(ws.get_all_records)
+        except Exception as error:  # noqa: BLE001
+            print(f"  ⚠ Could not read {tab_name} ({error}); skipping")
+            continue
+
+        for row in records:
+            created = str(row.get("created_at", "") or "").strip()
+            if not created:
+                continue
+            key = compose_key(tab_name, row)
+            if key:
+                observed[key] = min(created, observed[key]) if key in observed else created
+
+    print(f"  ✓ read {len(observed)} existing first-seen dates from the live tabs")
+    return observed
+
+
 def write_to_sheets(tab_data: dict):
     """
     Write all FC identity layer tables directly to Google Sheets.
@@ -769,7 +858,14 @@ def write_to_sheets(tab_data: dict):
     Uses env-based refresh-token credentials when available, with local
     token_musiclessons.json fallback for laptop use.
     Spreadsheet ID is read from GOOGLE_SPREADSHEET_ID env var / .env file.
+
+    Pass --no-sheets to rehearse the whole generation — reads, ID derivation,
+    CSVs, first-seen resolution — without touching the live tabs.
     """
+    if "--no-sheets" in sys.argv:
+        print("\n  --no-sheets: skipping Google Sheets write (CSVs still written)")
+        return False
+
     spreadsheet_id = os.environ.get("GOOGLE_SPREADSHEET_ID")
     if not spreadsheet_id:
         print("  ✗ GOOGLE_SPREADSHEET_ID not set — skipping Sheets write")
