@@ -77,6 +77,11 @@ class MMSClient:
                 'teacher_id': 'tch_zVg1Js',
                 'instruments': ['guitar']
             },
+            'Matthew': {
+                'full_name': 'Matthew Leung',
+                'teacher_id': 'tch_zLY8Jn',
+                'instruments': ['piano']
+            },
             'Patrick': {
                 'full_name': 'Patrick Shand',
                 'teacher_id': 'tch_zw9SJ3',

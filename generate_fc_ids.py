@@ -96,6 +96,7 @@ TUTORS = [
     {"short_name": "Finn",     "full_name": "Finn Le Marinel",         "mms_teacher_id": "tch_QhxJJ",  "instruments": ["guitar", "bass", "ukulele"]},
     {"short_name": "Kenny",    "full_name": "Kenny Bates",             "mms_teacher_id": "tch_zsyfJr", "instruments": ["guitar"]},
     {"short_name": "Kim",      "full_name": "Kim Grant",               "mms_teacher_id": "tch_zVg1Js", "instruments": ["guitar"]},
+    {"short_name": "Matthew",  "full_name": "Matthew Leung",            "mms_teacher_id": "tch_zLY8Jn", "instruments": ["piano"]},
     {"short_name": "Patrick",  "full_name": "Patrick Shand",           "mms_teacher_id": "tch_zw9SJ3", "instruments": ["guitar", "piano"]},
     {"short_name": "Robbie",   "full_name": "Robbie Tranter",          "mms_teacher_id": "tch_zV9hJ2", "instruments": ["guitar", "bass", "ukulele"]},
     {"short_name": "Stef",     "full_name": "Stef McGlinchey",         "mms_teacher_id": "tch_z5YmJX", "instruments": ["guitar"]},

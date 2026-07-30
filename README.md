@@ -69,7 +69,7 @@ The Brain guides you through 5 steps:
 
 ## Features
 
-✅ **Smart tutor suggestion** - Filters tutors by instrument (15 teachers supported)
+✅ **Smart tutor suggestion** - Filters durable tutor identities by instrument
 ✅ **Exact templates** - Uses official First Chord messaging templates
 ✅ **Default pricing** - Always 30 min / £25 (as per latest requirements)
 ✅ **Per-student Soundslice** - Unique course code for each student

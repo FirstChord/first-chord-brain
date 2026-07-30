@@ -6,7 +6,10 @@
 
 ## What First Chord Is
 
-A music school run by Finn Le Marinel. ~200 active students, 16 tutors. Students have lessons booked via MyMusicStaff (MMS), pay via Stripe, and access learning materials via Soundslice and Theta Music Trainer.
+A music school run by Finn Le Marinel. ~200 active students and a durable tutor
+identity list whose live availability is overlaid by the dashboard's
+`Tutor_Lifecycle` lane. Students have lessons booked via MyMusicStaff (MMS), pay
+via Stripe, and access learning materials via Soundslice and Theta Music Trainer.
 
 ---
 
@@ -78,7 +81,7 @@ New students onboarded via Brain get `fc_std_` from `forename:surname:email` (pr
 | `Pause History` | Log of payment pauses |
 | `FC_Students` | 199 students with FC IDs, `is_adult` flag |
 | `FC_People` | 349 people: tutors + students + parents |
-| `FC_Tutors` | 16 active tutors with FC + MMS IDs |
+| `FC_Tutors` | 17 durable tutor identities with FC + MMS IDs |
 | `FC_Parent_Student_Links` | 150 parent→student relationships |
 | `FC_External_IDs` | 942 mappings: MMS, Stripe, Soundslice, Theta |
 | `Review_Flags` | Structured review flags (flag_type, mms_id, student_name, detail, generated_date) — readable by admin dashboard |
@@ -90,7 +93,7 @@ New students onboarded via Brain get `fc_std_` from `forename:surname:email` (pr
 
 ---
 
-## Tutor Roster (16 active)
+## Tutor identities (17)
 
 | Short name | Full name | MMS ID | FC Tutor ID |
 |---|---|---|---|
@@ -105,13 +108,19 @@ New students onboarded via Brain get `fc_std_` from `forename:surname:email` (pr
 | Ines | Ines Alban Zapata Peréz | tch_zHJlJx | fc_tut_e22aab88 |
 | Kenny | Kenny Bates | tch_zsyfJr | fc_tut_41c8e78a |
 | Kim | Kim Grant | tch_zVg1Js | fc_tut_ed4fa93b |
+| Matthew | Matthew Leung | tch_zLY8Jn | fc_tut_c5f0ea5e |
 | Patrick | Patrick Shand | tch_zw9SJ3 | fc_tut_e3b01d7a |
 | Robbie | Robbie Tranter | tch_zV9hJ2 | fc_tut_6398f1e6 |
 | Scott | Scott Brice | tch_zMWrJR | fc_tut_12949202 |
 | Stef | Stef McGlinchey | tch_z5YmJX | fc_tut_3cfe36ee |
 | Tom | Tom Walters | tch_mYJJR | fc_tut_084e84bf |
 
-Single source of truth: `first-chord-brain/src/mms_client.py`. To add a tutor: add entry there, run `npm run generate-configs` in dashboard.
+Until the two Brain consumers are consolidated, keep
+`generate_fc_ids.py:TUTORS` and `src/mms_client.py:self.teachers` aligned.
+Identity generation and dashboard sync read the former; Brain onboarding reads
+the latter. Operational active/leaving/retired state belongs to the dashboard's
+`Tutor_Lifecycle` sheet and is not represented by deleting historical identities
+from either list.
 
 ---
 
