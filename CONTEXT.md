@@ -35,8 +35,9 @@ All cross-tool paths are defined in `first-chord-brain/config.py`. Never hardcod
 - **Audit registry vs Sheets:** `python3 audit_cross_reference.py`
 - **Key files:**
   - `config.py` — all workspace paths
+  - `tutors.py` — canonical durable tutor identity list used by Brain and dashboard generation
   - `generate_fc_ids.py` — generates FC IDs, writes to Sheets
-  - `src/mms_client.py` — tutor master list + MMS API (`get_waiting_students`, `get_student_details`, `_parse_note_fields`)
+  - `src/mms_client.py` — MMS API (`get_waiting_students`, `get_student_details`, `_parse_note_fields`)
   - `src/onboarding.py` — full WGCS onboarding flow
   - `src/sheets_client.py` — writes new students to Google Sheets
   - `exports/fc_identity_layer/` — local CSV backup of FC identity layer
@@ -116,12 +117,12 @@ New students onboarded via Brain get `fc_std_` from `forename:surname:email` (pr
 | Stef | Stef McGlinchey | tch_z5YmJX | fc_tut_3cfe36ee |
 | Tom | Tom Walters | tch_mYJJR | fc_tut_084e84bf |
 
-Until the two Brain consumers are consolidated, keep
-`generate_fc_ids.py:TUTORS` and `src/mms_client.py:self.teachers` aligned.
-Identity generation and dashboard sync read the former; Brain onboarding reads
-the latter. Operational active/leaving/retired state belongs to the dashboard's
+`tutors.py:TUTORS` is the one manually maintained tutor identity list. Brain
+onboarding and identity generation import it directly; the dashboard's
+`npm run sync-admin-tutors` command generates `ADMIN_TUTORS` from the same file.
+Operational active/leaving/retired state belongs to the dashboard's
 `Tutor_Lifecycle` sheet and is not represented by deleting historical identities
-from either list.
+from the canonical list.
 
 ---
 

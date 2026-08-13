@@ -18,7 +18,8 @@ IDs are deterministic: same MMS ID always generates same FC ID.
 This means this script can be re-run safely without creating duplicates.
 
 Usage:
-    python3 generate_fc_ids.py
+    python3 generate_fc_ids.py --no-sheets  # rehearsal; local CSVs only
+    python3 generate_fc_ids.py              # live FC tab update
 """
 
 import csv
@@ -40,6 +41,7 @@ from fc_first_seen import (
     merge_first_seen,
     save_first_seen,
 )
+from tutors import TUTORS
 ENV_FILE = Path(__file__).parent / ".env"
 
 
@@ -85,28 +87,6 @@ APPS_SCRIPT_URL = (
 GOOGLE_SHEETS_SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive",
-]
-
-# ── Tutor master list (from Brain's mms_client.py — single source) ──────────────
-TUTORS = [
-    {"short_name": "Arion",    "full_name": "Arion Xenos",             "mms_teacher_id": "tch_zplpJw", "instruments": ["guitar", "piano"]},
-    {"short_name": "Dean",     "full_name": "Dean Louden",             "mms_teacher_id": "tch_zV9TJN", "instruments": ["guitar", "bass"]},
-    {"short_name": "Eléna",    "full_name": "Eléna Esposito",          "mms_teacher_id": "tch_zpy4J9", "instruments": ["piano"]},
-    {"short_name": "Fennella", "full_name": "Fennella McCallum",       "mms_teacher_id": "tch_C2bJ9",  "instruments": ["singing", "piano"]},
-    {"short_name": "Finn",     "full_name": "Finn Le Marinel",         "mms_teacher_id": "tch_QhxJJ",  "instruments": ["guitar", "bass", "ukulele"]},
-    {"short_name": "Hamish",   "full_name": "Hamish Roberts",          "mms_teacher_id": "tch_zLnnJw", "instruments": ["guitar"]},
-    {"short_name": "Kenny",    "full_name": "Kenny Bates",             "mms_teacher_id": "tch_zsyfJr", "instruments": ["guitar"]},
-    {"short_name": "Kim",      "full_name": "Kim Grant",               "mms_teacher_id": "tch_zVg1Js", "instruments": ["guitar"]},
-    {"short_name": "Matthew",  "full_name": "Matthew Leung",            "mms_teacher_id": "tch_zLY8Jn", "instruments": ["piano"]},
-    {"short_name": "Patrick",  "full_name": "Patrick Shand",           "mms_teacher_id": "tch_zw9SJ3", "instruments": ["guitar", "piano"]},
-    {"short_name": "Robbie",   "full_name": "Robbie Tranter",          "mms_teacher_id": "tch_zV9hJ2", "instruments": ["guitar", "bass", "ukulele"]},
-    {"short_name": "Stef",     "full_name": "Stef McGlinchey",         "mms_teacher_id": "tch_z5YmJX", "instruments": ["guitar"]},
-    {"short_name": "Tom",      "full_name": "Tom Walters",             "mms_teacher_id": "tch_mYJJR",  "instruments": ["guitar", "bass"]},
-    {"short_name": "Ines",     "full_name": "Ines Alban Zapata Peréz", "mms_teacher_id": "tch_zHJlJx", "instruments": ["piano"]},
-    {"short_name": "David",    "full_name": "David Husz",              "mms_teacher_id": "tch_z2j2Jf", "instruments": ["guitar", "piano"]},
-    {"short_name": "Scott",    "full_name": "Scott Brice",             "mms_teacher_id": "tch_zMWrJR", "instruments": ["guitar"]},
-    {"short_name": "Calum",    "full_name": "Calum Steel",             "mms_teacher_id": "tch_zMX5Jc", "instruments": ["guitar"]},
-    {"short_name": "Chloe",    "full_name": "Chloe Mak",               "mms_teacher_id": "tch_zQbNJk", "instruments": ["singing", "piano"]},
 ]
 
 # ── ID generation ──────────────────────────────────────────────────────────────
@@ -732,7 +712,7 @@ def generate():
     fc_review_flags = [_parse_flag(f) for f in review_flags]
 
     # ── Write directly to Google Sheets ──────────────────────────────────────
-    write_to_sheets({
+    sheets_updated = write_to_sheets({
         "FC_Students":             (fc_students,            STUDENTS_FIELDS),
         "FC_People":               (fc_people,              PEOPLE_FIELDS),
         "FC_Tutors":               (fc_tutors,              TUTORS_FIELDS),
@@ -772,7 +752,10 @@ def generate():
     print(f"    Soundslice courses: {ss_count}")
     print(f"    Theta usernames:    {theta_count}")
     print(f"  Review flags:     {len(review_flags)}")
-    print(f"\n  Google Sheets tabs updated automatically.")
+    if sheets_updated:
+        print("\n  Google Sheets tabs updated successfully.")
+    else:
+        print("\n  Google Sheets tabs were not updated.")
     print(f"  CSVs also saved to: {OUTPUT_DIR}")
 
 

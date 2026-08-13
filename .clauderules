@@ -69,11 +69,11 @@ Templates in `src/templates.py` must match First Chord's official messaging:
 - Experience levels: "a complete beginner", "has some experience", "at an intermediate level"
 
 ## Teacher Database
-All teacher information in `src/mms_client.py`:
+All durable teacher identities live in the root `tutors.py` file:
 - Keep short names and full names
 - Include all instruments each teacher teaches
 - Update MMS teacher IDs as needed
-- Never hard-code teacher info elsewhere
+- Never hard-code teacher info elsewhere; Brain and dashboard generation derive from this list
 
 ## Testing
 - Write tests for new features in `tests/`

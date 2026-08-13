@@ -83,6 +83,7 @@ The Brain guides you through 5 steps:
 ```
 first-chord-brain/
 ├── brain.py                    # Main CLI entry point
+├── tutors.py                   # Canonical durable tutor identities
 ├── src/
 │   ├── onboarding.py          # Main workflow orchestration
 │   ├── sheets_client.py       # Google Sheets integration

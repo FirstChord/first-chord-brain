@@ -1,5 +1,10 @@
 # Teacher Database Update 🎓
 
+> Historical implementation note. The editable teacher database has since moved
+> to the canonical `tutors.py:TUTORS` list. Do not follow the older
+> `src/mms_client.py:self.teachers` editing instructions below; that structure is
+> now generated in memory from `tutors.py`.
+
 **Updated:** 2025-11-22
 
 ## What Changed

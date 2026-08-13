@@ -8,6 +8,7 @@ import os
 import requests
 from datetime import datetime
 from dotenv import load_dotenv
+from tutors import TUTORS
 
 load_dotenv()
 
@@ -17,101 +18,16 @@ class MMSClient:
         self.school_id = os.getenv('MMS_SCHOOL_ID')
         self.bearer_token = os.getenv('MMS_BEARER_TOKEN')
 
-        # Complete teacher database — single source of truth for Brain
+        # Complete teacher database derived from the canonical tutors.py list.
         # Format: short_name -> {full_name, teacher_id, fc_tutor_id, instruments}
         # fc_tutor_id is deterministic: sha256(teacher_id)[:8]
-        # To add a new tutor: add entry here and run `npm run generate-configs` on dashboard.
         self.teachers = {
-            'Arion': {
-                'full_name': 'Arion Xenos',
-                'teacher_id': 'tch_zplpJw',
-                'instruments': ['guitar', 'piano']
-            },
-            'Calum': {
-                'full_name': 'Calum Steel',
-                'teacher_id': 'tch_zMX5Jc',
-                'instruments': ['guitar']
-            },
-            'Chloe': {
-                'full_name': 'Chloe Mak',
-                'teacher_id': 'tch_zQbNJk',
-                'instruments': ['guitar', 'piano']
-            },
-            'David': {
-                'full_name': 'David Husz',
-                'teacher_id': 'tch_z2j2Jf',
-                'instruments': ['guitar', 'piano']
-            },
-            'Dean': {
-                'full_name': 'Dean Louden',
-                'teacher_id': 'tch_zV9TJN',
-                'instruments': ['guitar', 'bass']
-            },
-            'Eléna': {
-                'full_name': 'Eléna Esposito',
-                'teacher_id': 'tch_zpy4J9',
-                'instruments': ['piano']
-            },
-            'Fennella': {
-                'full_name': 'Fennella McCallum',
-                'teacher_id': 'tch_C2bJ9',
-                'instruments': ['singing', 'piano']
-            },
-            'Finn': {
-                'full_name': 'Finn Le Marinel',
-                'teacher_id': 'tch_QhxJJ',
-                'instruments': ['guitar', 'bass', 'ukulele']
-            },
-            'Hamish': {
-                'full_name': 'Hamish Roberts',
-                'teacher_id': 'tch_zLnnJw',
-                'instruments': ['guitar']
-            },
-            'Ines': {
-                'full_name': 'Ines Alban Zapata Peréz',
-                'teacher_id': 'tch_zHJlJx',
-                'instruments': ['piano']
-            },
-            'Kenny': {
-                'full_name': 'Kenny Bates',
-                'teacher_id': 'tch_zsyfJr',
-                'instruments': ['guitar']
-            },
-            'Kim': {
-                'full_name': 'Kim Grant',
-                'teacher_id': 'tch_zVg1Js',
-                'instruments': ['guitar']
-            },
-            'Matthew': {
-                'full_name': 'Matthew Leung',
-                'teacher_id': 'tch_zLY8Jn',
-                'instruments': ['piano']
-            },
-            'Patrick': {
-                'full_name': 'Patrick Shand',
-                'teacher_id': 'tch_zw9SJ3',
-                'instruments': ['guitar', 'piano']
-            },
-            'Robbie': {
-                'full_name': 'Robbie Tranter',
-                'teacher_id': 'tch_zV9hJ2',
-                'instruments': ['guitar', 'bass']
-            },
-            'Scott': {
-                'full_name': 'Scott Brice',
-                'teacher_id': 'tch_zMWrJR',
-                'instruments': ['guitar']
-            },
-            'Stef': {
-                'full_name': 'Stef McGlinchey',
-                'teacher_id': 'tch_z5YmJX',
-                'instruments': ['guitar']
-            },
-            'Tom': {
-                'full_name': 'Tom Walters',
-                'teacher_id': 'tch_mYJJR',
-                'instruments': ['guitar', 'bass']
-            },
+            tutor['short_name']: {
+                'full_name': tutor['full_name'],
+                'teacher_id': tutor['mms_teacher_id'],
+                'instruments': list(tutor['instruments']),
+            }
+            for tutor in TUTORS
         }
 
         # Enrich each teacher with their canonical FC tutor ID

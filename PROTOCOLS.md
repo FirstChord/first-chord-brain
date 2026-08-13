@@ -113,7 +113,7 @@ python3 brain.py onboard "Test Student"
 
 ### Updating Teacher Database
 
-**Location:** `src/mms_client.py` → `self.teachers`
+**Canonical location:** `tutors.py` → `TUTORS`
 
 **To add a new teacher:**
 
@@ -126,9 +126,12 @@ python3 brain.py onboard "Test Student"
 ```
 
 **To update teacher info:**
-1. Find teacher in dictionary
+1. Find teacher in the canonical list
 2. Update instruments list
-3. Test tutor selection works
+3. Run `python3 -m unittest tests/test_tutor_roster.py`
+4. Rehearse identity generation with `python3 generate_fc_ids.py --no-sheets`
+5. Run `python3 generate_fc_ids.py` only when the live FC identity tabs should be updated
+6. From the dashboard repo, run `npm run sync-admin-tutors`
 
 **Verify:**
 ```bash
@@ -186,7 +189,7 @@ J: Parent Forename
 - Clean up old test files in `exports/`
 
 ### When First Chord Updates
-- **New teacher hired:** Add to `src/mms_client.py`
+- **New teacher hired:** Add once to `tutors.py`, then follow the tutor arrival workflow
 - **Message wording changes:** Update `src/templates.py`
 - **New data field needed:** Discuss column additions first
 - **Pricing changes:** Update `.env` if needed
