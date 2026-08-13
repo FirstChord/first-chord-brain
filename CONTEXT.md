@@ -81,7 +81,7 @@ New students onboarded via Brain get `fc_std_` from `forename:surname:email` (pr
 | `Pause History` | Log of payment pauses |
 | `FC_Students` | 199 students with FC IDs, `is_adult` flag |
 | `FC_People` | 349 people: tutors + students + parents |
-| `FC_Tutors` | 17 durable tutor identities with FC + MMS IDs |
+| `FC_Tutors` | 18 durable tutor identities with FC + MMS IDs |
 | `FC_Parent_Student_Links` | 150 parent→student relationships |
 | `FC_External_IDs` | 942 mappings: MMS, Stripe, Soundslice, Theta |
 | `Review_Flags` | Structured review flags (flag_type, mms_id, student_name, detail, generated_date) — readable by admin dashboard |
@@ -93,7 +93,7 @@ New students onboarded via Brain get `fc_std_` from `forename:surname:email` (pr
 
 ---
 
-## Tutor identities (17)
+## Tutor identities (18)
 
 | Short name | Full name | MMS ID | FC Tutor ID |
 |---|---|---|---|
@@ -105,6 +105,7 @@ New students onboarded via Brain get `fc_std_` from `forename:surname:email` (pr
 | Eléna | Eléna Esposito | tch_zpy4J9 | fc_tut_563694ef |
 | Fennella | Fennella McCallum | tch_C2bJ9 | fc_tut_1aacc30d |
 | Finn | Finn Le Marinel | tch_QhxJJ | fc_tut_b9b45f54 |
+| Hamish | Hamish Roberts | tch_zLnnJw | fc_tut_ec272a25 |
 | Ines | Ines Alban Zapata Peréz | tch_zHJlJx | fc_tut_e22aab88 |
 | Kenny | Kenny Bates | tch_zsyfJr | fc_tut_41c8e78a |
 | Kim | Kim Grant | tch_zVg1Js | fc_tut_ed4fa93b |

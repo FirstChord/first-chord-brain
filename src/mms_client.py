@@ -62,6 +62,11 @@ class MMSClient:
                 'teacher_id': 'tch_QhxJJ',
                 'instruments': ['guitar', 'bass', 'ukulele']
             },
+            'Hamish': {
+                'full_name': 'Hamish Roberts',
+                'teacher_id': 'tch_zLnnJw',
+                'instruments': ['guitar']
+            },
             'Ines': {
                 'full_name': 'Ines Alban Zapata Peréz',
                 'teacher_id': 'tch_zHJlJx',
