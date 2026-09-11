@@ -3,7 +3,6 @@ Student Onboarding Workflow
 Implements the 6-step WGCS onboarding process
 """
 
-import hashlib
 import pyperclip
 from datetime import datetime
 from rich.console import Console
@@ -75,15 +74,24 @@ class OnboardingWorkflow:
         self._update_dashboard_registry()
 
     @staticmethod
-    def _generate_fc_student_id(student_forename: str, student_surname: str, email: str) -> str:
+    def _generate_fc_student_id(mms_id: str) -> str:
         """
-        Generate a deterministic FC student ID from name and email.
-        Format: fc_std_XXXXXXXX (8 hex chars)
-        This ID is assigned at onboarding and is stable even before MMS ID is known.
-        When the MMS ID is later assigned, link it via FC_External_IDs.
+        Mint an FC student ID from the MMS student ID, or return "" without one.
+
+        Same formula as the dashboard's generateFcStudentId and the hourly
+        generate_fc_ids.py — all three use fc_ids.make_fc_id. Once stored, the
+        ID is authoritative and never recomputed. This used to mint from
+        forename:surname:email, which drifted whenever a name or email changed.
+
+        No MMS ID means no ID yet: whoever first stores one for this student
+        (the dashboard's registry creation, or the hourly job's derived fallback)
+        mints it from the MMS ID when it appears, so every path agrees.
         """
-        seed = f"{student_forename.strip().lower()}:{student_surname.strip().lower()}:{email.strip().lower()}"
-        return f"fc_std_{hashlib.sha256(seed.encode()).hexdigest()[:8]}"
+        mms_id = (mms_id or "").strip()
+        if not mms_id.startswith("sdt_"):
+            return ""
+        from fc_ids import make_fc_id
+        return make_fc_id("std", mms_id)
 
     def _pick_waiting_student(self):
         """
@@ -455,13 +463,11 @@ class OnboardingWorkflow:
             if mms_raw and not mms_raw.startswith("sdt_"):
                 console.print("[yellow]  MMS ID not recognised (should start with sdt_) — left blank[/yellow]")
 
-        # Generate canonical FC student ID (assigned at onboarding, stable before MMS ID exists)
+        # Mint the FC student ID from the MMS ID (blank until one exists)
         self.student_data['fc_student_id'] = self._generate_fc_student_id(
-            self.student_data['student_forename'],
-            self.student_data['student_surname'],
-            self.student_data['parent_email'],
+            self.student_data.get('mms_id', ''),
         )
-        console.print(f"\n[dim]FC ID: {self.student_data['fc_student_id']}[/dim]")
+        console.print(f"\n[dim]FC ID: {self.student_data['fc_student_id'] or 'assigned once an MMS ID exists'}[/dim]")
         if self.student_data['mms_id']:
             console.print(f"[dim]MMS ID: {self.student_data['mms_id']}[/dim]")
 
@@ -676,7 +682,7 @@ class OnboardingWorkflow:
 {contact_section}
 
 ## Identity
-- **FC Student ID:** {self.student_data.get('fc_student_id', 'not assigned')}
+- **FC Student ID:** {self.student_data.get('fc_student_id') or 'not assigned'}
 - **MMS Student ID:** *(to be filled when created in MMS)*
 
 ## WGCS Checklist
