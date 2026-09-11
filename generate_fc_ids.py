@@ -50,6 +50,7 @@ from fc_ids import (
     FLAG_CONFLICT,
     FLAG_DUPLICATE,
     FLAG_MALFORMED,
+    assert_registry_ids_parsed,
     assign_fc_student_ids,
     make_fc_id,
 )
@@ -257,7 +258,8 @@ def generate():
     # ── Load data ──
     print("Loading registry...")
     registry = parse_registry(REGISTRY_PATH)
-    print(f"  ✓ {len(registry)} students in registry\n")
+    stored_fc_ids = assert_registry_ids_parsed(registry)
+    print(f"  ✓ {len(registry)} students in registry ({stored_fc_ids} with a stored FC student ID)\n")
 
     print("Fetching Google Sheets students...")
     raw_rows = fetch_sheets_students()

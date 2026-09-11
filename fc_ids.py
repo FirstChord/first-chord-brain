@@ -99,3 +99,25 @@ def assign_fc_student_ids(candidates: dict) -> tuple[dict, dict]:
             assigned[mms_id], sources[mms_id] = make_fc_id("std", mms_id), "derived"
 
     return assigned, flags
+
+
+def assert_registry_ids_parsed(registry: dict) -> int:
+    """Refuse to continue if the registry parsed but yielded no FC student IDs.
+
+    parse_registry reads students-registry.js with a regex expecting
+    fcStudentId: 'fc_std_xxxxxxxx', as written by the dashboard's
+    appendRegistryEntry. If that shape changes, every lookup returns None and
+    assign_fc_student_ids quietly falls back to derived IDs — rekeying every
+    stored ID with no flag. That is a format break, not a data condition, so it
+    stops the run (and the hourly job alerts) instead of flagging.
+
+    Returns the number of entries carrying a stored ID.
+    """
+    stored = sum(1 for entry in registry.values() if (entry or {}).get("fcStudentId"))
+    if registry and not stored:
+        raise RuntimeError(
+            f"Registry parsed {len(registry)} students but no fcStudentId values. "
+            "The registry format has probably changed; generating now would replace "
+            "every stored FC student ID with a derived one. Fix parse_registry first."
+        )
+    return stored

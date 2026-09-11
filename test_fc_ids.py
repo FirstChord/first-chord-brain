@@ -13,6 +13,7 @@ from fc_ids import (
     FLAG_CONFLICT,
     FLAG_DUPLICATE,
     FLAG_MALFORMED,
+    assert_registry_ids_parsed,
     assign_fc_student_ids,
     make_fc_id,
 )
@@ -93,6 +94,21 @@ class ResolutionTests(unittest.TestCase):
 
 
 class RegistryParserTests(unittest.TestCase):
+    def test_a_registry_that_parses_without_ids_stops_the_run(self):
+        # The silent failure: a format change makes every fcStudentId None and
+        # the job rekeys all stored IDs to derived ones with no flag.
+        with self.assertRaises(RuntimeError):
+            assert_registry_ids_parsed({TYLER: {"firstName": "Tyler", "fcStudentId": None}})
+
+    def test_registry_guard_passes_when_ids_are_present_or_registry_is_empty(self):
+        self.assertEqual(assert_registry_ids_parsed({TYLER: {"fcStudentId": TYLER_STORED}}), 1)
+        self.assertEqual(assert_registry_ids_parsed({}), 0)
+
+    def test_real_registry_parses_with_stored_ids(self):
+        import generate_fc_ids
+        registry = generate_fc_ids.parse_registry(generate_fc_ids.REGISTRY_PATH)
+        self.assertEqual(assert_registry_ids_parsed(registry), len(registry))
+
     def test_parse_registry_reads_fc_student_id(self):
         import generate_fc_ids
 
