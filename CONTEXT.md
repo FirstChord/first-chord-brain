@@ -68,12 +68,12 @@ The canonical identity system linking all external IDs together.
 | Format | Represents | Seed |
 |---|---|---|
 | `fc_per_XXXXXXXX` | A person (student, parent, tutor) | MMS ID or `parent:{email}` |
-| `fc_std_XXXXXXXX` | A student record | MMS student ID |
+| `fc_std_XXXXXXXX` | A student record | MMS student ID — **at mint only**; the stored value then wins |
 | `fc_tut_XXXXXXXX` | A tutor record | MMS teacher ID |
 
 IDs are **deterministic**: `sha256(seed)[:8]`. Same seed always → same ID. Safe to regenerate.
 
-New students onboarded via Brain get `fc_std_` from `forename:surname:email` (pre-MMS). Once MMS ID is known, it's linked via `FC_External_IDs`.
+**FC student IDs are minted once, then stored.** The dashboard (`generateFcStudentId`) and `brain.py onboard` mint from the MMS student ID via the same formula (`fc_ids.make_fc_id`); `generate_fc_ids.py` reads the stored value (registry → Students `FC Student ID` cell → derived) and never recomputes it. Students onboarded before 2026-09 carry IDs from an old `forename:surname:email` seed — still valid, because the stored value wins. Disagreements surface as `FC ID CONFLICT` / `FC ID MALFORMED` / `FC ID DUPLICATE` review flags; a registry that parses with no IDs stops the run. Both repos pin `sdt_WFQ7Js → fc_std_fa157fc5`. Record: `music-school-dashboard/docs/plans/active/fc-student-id-convergence.md`.
 
 ### Google Sheets Tabs (First Chord Database)
 | Tab | Contents |
@@ -250,7 +250,6 @@ To re-run flags: `python3 generate_fc_ids.py` (flags are regenerated each time).
 
 ## What's NOT Yet Done
 - Dashboard `generate-configs` doesn't yet pass `fcStudentId` through to generated config files
-- When a pre-MMS student gets their MMS ID added to Sheets, their FC ID changes (from name/email seed to MMS seed) — future work to preserve the old ID as a legacy link in `FC_External_IDs`
 - MMS student status is **not** changed from "Waiting" to "Active" after onboarding — still manual in MMS
 - Stripe columns (`stripe_customer_id`, `stripe_subscription_id`) in the Students tab are not auto-populated — filled manually or by Payment Pause when the student subscribes
 - No `Status` column in the Students tab — active vs waiting distinction exists in MMS but not mirrored to Sheets
