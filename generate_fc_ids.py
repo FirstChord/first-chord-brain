@@ -17,6 +17,10 @@ FC ID formats:
 IDs are deterministic: same MMS ID always generates same FC ID.
 This means this script can be re-run safely without creating duplicates.
 
+Exception, by design: an FC student ID already stored in the dashboard
+registry (or the Students sheet) wins over the formula. It is minted once and
+never recomputed — see fc_ids.assign_fc_student_ids.
+
 Usage:
     python3 generate_fc_ids.py --no-sheets  # rehearsal; local CSVs only
     python3 generate_fc_ids.py              # live FC tab update
@@ -42,6 +46,13 @@ from fc_first_seen import (
     save_first_seen,
 )
 from tutors import TUTORS
+from fc_ids import (
+    FLAG_CONFLICT,
+    FLAG_DUPLICATE,
+    FLAG_MALFORMED,
+    assign_fc_student_ids,
+    make_fc_id,
+)
 ENV_FILE = Path(__file__).parent / ".env"
 
 
@@ -91,14 +102,7 @@ GOOGLE_SHEETS_SCOPES = [
 
 # ── ID generation ──────────────────────────────────────────────────────────────
 
-def make_fc_id(prefix: str, seed: str) -> str:
-    """
-    Generate a deterministic FC ID from a seed string.
-    Same seed always produces same ID.
-    Format: fc_{prefix}_{8 hex chars}
-    """
-    h = hashlib.sha256(seed.encode()).hexdigest()[:8]
-    return f"fc_{prefix}_{h}"
+# make_fc_id lives in fc_ids.py (imported above) so the formula has one home.
 
 
 def make_tutor_short_to_id_map(tutors: list) -> dict:
@@ -133,6 +137,7 @@ def parse_registry(path: Path) -> dict:
             "instrument":    get_field("instrument"),
             "thetaUsername": get_field("thetaUsername"),
             "soundsliceUrl": get_field("soundsliceUrl"),
+            "fcStudentId":   get_field("fcStudentId"),
         }
     return students
 
@@ -268,6 +273,13 @@ def generate():
     # ── Merge student universe ──
     # Union of registry + sheets (by MMS ID)
     all_mms_ids = set(registry.keys()) | set(sheets_by_mms.keys())
+    fc_student_id_by_mms, fc_id_flags = assign_fc_student_ids({
+        mms_id: (
+            (registry.get(mms_id) or {}).get("fcStudentId") or "",
+            (sheets_by_mms.get(mms_id) or {}).get("fc_student_id", ""),
+        )
+        for mms_id in all_mms_ids
+    })
     print(f"Total unique student MMS IDs (union): {len(all_mms_ids)}\n")
 
     # ── OUTPUT 1: FC_Tutors ────────────────────────────────────────────────────
@@ -377,7 +389,9 @@ def generate():
 
         # ── Generate FC IDs ──
         fc_per_id  = make_fc_id("per", mms_id)
-        fc_std_id  = make_fc_id("std", mms_id)
+        fc_std_id  = fc_student_id_by_mms[mms_id]
+        for flag_type, detail in fc_id_flags.get(mms_id, []):
+            review_flags.append(f"{flag_type.ljust(16)}{mms_id}  {first} {last}: {detail}")
         friendly   = reg.get("friendlyUrl","") if reg else ""
 
         # Student as person
@@ -690,7 +704,8 @@ def generate():
 
     # ── Parse review flags into structured rows (for Sheets + admin dashboard) ──
     def _parse_flag(s: str) -> dict:
-        for ftype in ("TUTOR CONFLICT", "SHEETS ONLY", "REGISTRY ONLY"):
+        for ftype in ("TUTOR CONFLICT", "SHEETS ONLY", "REGISTRY ONLY",
+                      FLAG_CONFLICT, FLAG_MALFORMED, FLAG_DUPLICATE):
             if s.startswith(ftype):
                 rest = s[len(ftype):].strip()
                 parts = rest.split(None, 1)

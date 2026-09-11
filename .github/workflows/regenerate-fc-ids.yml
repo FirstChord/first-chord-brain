@@ -49,6 +49,12 @@ jobs:
       - name: Verify cross-repo registry path
         run: test -f FirstChord/music-school-dashboard/lib/config/students-registry.js
 
+      - name: Run brain tests
+        # Guards the FC ID formula and stored-ID resolution before anything
+        # is written to the live FC tabs.
+        working-directory: FirstChord/first-chord-brain
+        run: python -m unittest discover
+
       - name: Run FC regeneration
         working-directory: FirstChord/first-chord-brain
         run: python generate_fc_ids.py
