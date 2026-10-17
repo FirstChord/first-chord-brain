@@ -61,10 +61,13 @@ jobs:
         working-directory: FirstChord/first-chord-brain
         run: python generate_fc_ids.py
 
+      # The exports hold the full roster (names, emails, Stripe ids), so keep
+      # them only to debug a failed run, and only briefly.
       - name: Upload FC export artefacts
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@v7
         with:
           name: fc-identity-layer-exports
           path: FirstChord/first-chord-brain/exports/fc_identity_layer
           if-no-files-found: ignore
+          retention-days: 3
