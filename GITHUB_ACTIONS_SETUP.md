@@ -7,7 +7,7 @@ This repo now includes:
 It runs `generate_fc_ids.py`:
 
 - manually via `workflow_dispatch`
-- automatically every hour
+- automatically every four hours (the private-repo Actions budget; a 4-hourly run is about 180 minutes a month)
 
 ## Why it checks out two repos
 

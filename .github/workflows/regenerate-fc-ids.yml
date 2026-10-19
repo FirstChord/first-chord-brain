@@ -3,7 +3,7 @@ name: Regenerate FC IDs
 on:
   workflow_dispatch:
   schedule:
-    - cron: "12 * * * *"
+    - cron: "12 */4 * * *"
 
 permissions:
   contents: read
